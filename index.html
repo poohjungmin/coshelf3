@@ -125,6 +125,28 @@
     margin: 0 0 14px;
   }
 
+  /* 등록/수정 화면 - 결과 카드 상단의 "< 뒤로가기" + 제목 */
+  .result-card-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 14px;
+  }
+  .result-card-header h2 {
+    margin: 0;
+  }
+  .back-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    line-height: 1;
+    color: var(--accent);
+    cursor: pointer;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .back-btn:active { opacity: 0.6; }
+
   /* ---------------- 업로드 영역 ---------------- */
   .upload-zone {
     display: flex;
@@ -880,8 +902,7 @@
 
   <header class="top">
     <button type="button" class="settings-btn" id="settingsBtn" aria-label="설정">⚙️</button>
-    <h1>내 화장품</h1>
-    <p>사진으로 등록하고 소비기한을 놓치지 마세요</p>
+    <h1>Coshelf</h1>
   </header>
 
   <!-- ============================================================
@@ -930,7 +951,10 @@
 
     <!-- 2-3. 결과 카드 (분석 후 / 직접입력 / 수정 시 노출) -->
     <section class="card" id="resultCard" style="display:none;">
-      <h2 id="resultCardTitle">제품 정보 (직접 수정 가능)</h2>
+      <div class="result-card-header">
+        <button type="button" class="back-btn" id="registerBackBtn" aria-label="뒤로가기">‹</button>
+        <h2 id="resultCardTitle">제품 정보 (직접 수정 가능)</h2>
+      </div>
 
       <div class="result-field">
         <label for="brandInput">브랜드</label>
@@ -1121,6 +1145,21 @@ API Key는 내 기기에만 저장되며
   </div>
 </div>
 
+<!-- ============================================================
+     등록/수정 화면 나가기 확인 모달 (변경사항이 있을 때만 표시)
+     ============================================================ -->
+<div class="modal-backdrop" id="discardConfirmBackdrop">
+  <div class="modal-card">
+    <h3>나가시겠습니까?</h3>
+    <p>변경사항이 저장되지 않습니다.
+정말 나가시겠습니까?</p>
+    <div class="modal-btn-group">
+      <button type="button" class="btn btn-danger" id="discardConfirmBtn">나가기</button>
+      <button type="button" class="btn btn-neutral" id="discardCancelBtn">취소</button>
+    </div>
+  </div>
+</div>
+
 
 <script>
 /* =============================================================
@@ -1183,6 +1222,7 @@ const saveStatusText = document.getElementById("saveStatusText");
 const uploadCard = document.getElementById("uploadCard");
 const analyzeCard = document.getElementById("analyzeCard");
 const resultCardTitle = document.getElementById("resultCardTitle");
+const registerBackBtn = document.getElementById("registerBackBtn");
 
 const tabRegisterBtn = document.getElementById("tabRegisterBtn");
 const sheetBackdrop = document.getElementById("sheetBackdrop");
@@ -1222,6 +1262,10 @@ const deleteConfirmBackdrop = document.getElementById("deleteConfirmBackdrop");
 const deleteConfirmBtn = document.getElementById("deleteConfirmBtn");
 const deleteCancelBtn = document.getElementById("deleteCancelBtn");
 
+const discardConfirmBackdrop = document.getElementById("discardConfirmBackdrop");
+const discardConfirmBtn = document.getElementById("discardConfirmBtn");
+const discardCancelBtn = document.getElementById("discardCancelBtn");
+
 let selectedBase64 = null;      // 업로드한 이미지의 base64 데이터 (data URL 포함)
 let selectedMimeType = null;    // 이미지 MIME 타입 (image/png, image/jpeg 등)
 let currentSourceMode = "album"; // "album" | "manual"
@@ -1231,6 +1275,7 @@ let currentFavorite = false;    // 등록/수정 폼에서 현재 즐겨찾기 O
 let currentSearchQuery = "";    // 목록 화면 검색어 (소문자로 정규화되어 저장됨)
 let pendingRestoreProducts = null; // 복원 확인 대기 중인 백업 파일의 products 배열
 let pendingDeleteId = null;     // 삭제 확인 모달에서 "삭제"를 누르면 실제 삭제할 제품 id
+let initialFormSnapshot = null; // 등록/수정 화면에 진입했을 때의 입력값 스냅샷 (변경 여부 판단용)
 
 // 앱 실행 시에는 API Key 관련 안내를 별도로 띄우지 않고 바로 홈 화면으로 진입합니다.
 // (Key가 없어도 앱은 정상 사용 가능 - AI 사진 인식 기능만 사용 시점에 확인합니다)
@@ -1557,6 +1602,34 @@ restoreConfirmBtn.addEventListener("click", () => {
 });
 
 /* =========================================================================
+   1-6. 등록/수정 화면 변경 여부 감지 (뒤로가기 확인용)
+   ------------------------------------------------------------------------
+   화면에 처음 진입했을 때의 값(브랜드/제품명/카테고리/소비기한/즐겨찾기)을
+   스냅샷으로 저장해두고, 뒤로가기를 누른 시점의 현재 값과 비교한다.
+   ========================================================================= */
+function captureFormSnapshot() {
+  return {
+    brand: brandInput.value.trim(),
+    product: productInput.value.trim(),
+    category: categoryInput.value.trim(),
+    expiryDate: expiryInput.value.trim(),
+    favorite: currentFavorite,
+  };
+}
+
+function hasUnsavedChanges() {
+  if (!initialFormSnapshot) return false;
+  const current = captureFormSnapshot();
+  return (
+    current.brand !== initialFormSnapshot.brand ||
+    current.product !== initialFormSnapshot.product ||
+    current.category !== initialFormSnapshot.category ||
+    current.expiryDate !== initialFormSnapshot.expiryDate ||
+    current.favorite !== initialFormSnapshot.favorite
+  );
+}
+
+/* =========================================================================
    2. 등록 화면 - 사진 소스에 따라 카드 표시/숨김 (사진 업로드 / 직접입력)
    ========================================================================= */
 function setSourceMode(mode) {
@@ -1587,6 +1660,8 @@ function setSourceMode(mode) {
     setFieldValue(categoryInput, null);
     expiryInput.value = "";
   }
+
+  initialFormSnapshot = captureFormSnapshot();
 }
 
 // 미리보기 박스를 누르면 사진 업로드 입력이 열리도록 함
@@ -1894,6 +1969,7 @@ function fillResultCard(result) {
   setFieldValue(productInput, result.product);
   setFieldValue(categoryInput, result.category);
   expiryInput.value = "";
+  initialFormSnapshot = captureFormSnapshot();
 }
 
 function setFieldValue(inputEl, value) {
@@ -1966,6 +2042,38 @@ function isValidCalendarDate(dateStr) {
     date.getDate() === day
   );
 }
+
+// ---------------------------------------------------------------
+// "<" 뒤로가기: 수정/등록 내용을 저장하지 않고 목록 화면으로 돌아간다.
+// (기존 제품 정보는 전혀 변경되지 않는다 - saveBtn을 누르지 않았으므로)
+// ---------------------------------------------------------------
+function leaveRegisterScreenWithoutSaving() {
+  editingProductId = null;
+  saveBtn.textContent = "저장하기";
+  if (resultCardTitle) resultCardTitle.textContent = "제품 정보 (직접 수정 가능)";
+  showScreen("screen-list");
+}
+
+registerBackBtn.addEventListener("click", () => {
+  if (hasUnsavedChanges()) {
+    discardConfirmBackdrop.classList.add("open");
+  } else {
+    leaveRegisterScreenWithoutSaving();
+  }
+});
+
+discardConfirmBackdrop.addEventListener("click", (e) => {
+  if (e.target === discardConfirmBackdrop) discardConfirmBackdrop.classList.remove("open");
+});
+
+discardCancelBtn.addEventListener("click", () => {
+  discardConfirmBackdrop.classList.remove("open"); // 수정 화면 유지, 아무 것도 변경하지 않음
+});
+
+discardConfirmBtn.addEventListener("click", () => {
+  discardConfirmBackdrop.classList.remove("open");
+  leaveRegisterScreenWithoutSaving(); // 변경사항을 저장하지 않고 목록으로 이동
+});
 
 saveBtn.addEventListener("click", () => {
   const productName = productInput.value.trim();
@@ -2084,6 +2192,8 @@ function openEditProduct(id) {
 
   if (resultCardTitle) resultCardTitle.textContent = "제품 정보 수정";
   saveBtn.textContent = "수정 완료";
+
+  initialFormSnapshot = captureFormSnapshot();
 
   showScreen("screen-register");
 }
