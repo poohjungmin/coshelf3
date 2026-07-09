@@ -57,7 +57,7 @@
   .app {
     max-width: 460px;
     margin: 0 auto;
-    padding: 28px 20px 110px; /* 하단 탭바만큼 여백 확보 */
+    padding: 28px 20px 140px; /* 하단 탭바(높이 확대)만큼 여백 확보 */
     min-height: 100vh;
   }
 
@@ -100,7 +100,7 @@
   .screen.active { display: block; }
 
   /* 목록 화면은 하단에 검색창이 추가로 붙으므로 여백을 더 확보 */
-  #screen-list { padding-bottom: 56px; }
+  #screen-list { padding-bottom: 74px; }
 
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(6px); }
@@ -125,24 +125,31 @@
     margin: 0 0 14px;
   }
 
-  /* 등록/수정 화면 - 결과 카드 상단의 "< 뒤로가기" + 제목 */
+  /* 등록/수정 화면 - 메인 화면 헤더와 동일한 좌우 여백/정렬 구조
+     (좌측: 뒤로가기, 가운데: 제목, 우측: 설정 버튼 자리만큼 여백 확보) */
   .result-card-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    position: relative;
+    text-align: center;
+    padding: 4px 0;
     margin: 0 0 14px;
+    min-height: 32px;
   }
   .result-card-header h2 {
     margin: 0;
   }
   .back-btn {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
     background: none;
     border: none;
-    font-size: 24px;
+    font-size: 26px;
+    font-weight: 700;
     line-height: 1;
+    padding: 6px;
     color: var(--accent);
     cursor: pointer;
-    padding: 0;
     -webkit-tap-highlight-color: transparent;
   }
   .back-btn:active { opacity: 0.6; }
@@ -316,6 +323,7 @@
 
   .home-hero.is-safe .line2 { color: var(--text-primary); }
   .home-hero.is-urgent .line2 { color: var(--danger); }
+  .home-hero.is-warning .line2 { color: var(--warning); }
 
   .home-empty {
     text-align: center;
@@ -659,7 +667,7 @@
     backdrop-filter: saturate(180%) blur(16px);
     -webkit-backdrop-filter: saturate(180%) blur(16px);
     border-top: 1px solid var(--border);
-    padding: 8px 0 max(10px, env(safe-area-inset-bottom));
+    padding: 10px 0 max(13px, env(safe-area-inset-bottom));
   }
 
   .tabbar-inner {
@@ -676,33 +684,33 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
     color: var(--text-secondary);
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    padding: 4px 18px;
+    padding: 6px 18px;
     -webkit-tap-highlight-color: transparent;
     transition: color 0.15s ease;
   }
 
-  .tab-btn .tab-icon { font-size: 21px; line-height: 1; }
+  .tab-btn .tab-icon { font-size: 27px; line-height: 1; }
 
   .tab-btn.active { color: var(--accent); }
 
   /* 가운데 등록 탭 - 살짝 떠 있는 원형 버튼으로 강조 */
   .tab-btn.tab-add .tab-icon {
-    width: 46px;
-    height: 46px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
     background: var(--accent);
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
-    margin-top: -22px;
-    box-shadow: 0 4px 12px rgba(0,122,255,0.32);
+    font-size: 29px;
+    margin-top: -29px;
+    box-shadow: 0 5px 15px rgba(0,122,255,0.32);
     transition: transform 0.12s ease;
   }
   .tab-btn.tab-add:active .tab-icon { transform: scale(0.94); }
@@ -733,7 +741,7 @@
     max-width: 460px;
     margin: 0 auto;
     /* 하단 탭바와 겹치지 않도록 safe-area + 탭바 높이만큼 여백 확보 */
-    padding: 0 10px calc(max(10px, env(safe-area-inset-bottom)) + 78px);
+    padding: 0 10px calc(max(10px, env(safe-area-inset-bottom)) + 94px);
     transform: translateY(115%);
     transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
     z-index: 91;
@@ -895,6 +903,54 @@
     padding: 12px;
     font-size: 14px;
   }
+
+  /* ============================================================
+     설정 화면 - 신호등 기준
+     ============================================================ */
+  .threshold-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+  }
+  .threshold-row + .threshold-row {
+    border-top: 1px solid var(--border);
+  }
+
+  .threshold-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .threshold-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .threshold-input-wrap input[type="number"] {
+    width: 64px;
+    font-size: 15px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    text-align: center;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+  .threshold-input-wrap input[type="number"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+  }
+
+  .threshold-unit {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
 </style>
 </head>
 <body>
@@ -1023,6 +1079,33 @@
     <p class="list-sort-note">
       API Key는 이 기기의 브라우저(localStorage)에만 저장되며, 외부로 전송되지 않습니다.
       Key가 없어도 앱의 다른 기능(등록/목록/수정/삭제/필터)은 그대로 사용할 수 있습니다.
+    </p>
+
+    <h2 class="settings-section-title">신호등 기준</h2>
+    <section class="card">
+      <div class="threshold-row">
+        <span class="threshold-label">🔴 빨간색 기준</span>
+        <div class="threshold-input-wrap">
+          <input type="number" id="redThresholdInput" min="0" inputmode="numeric" />
+          <span class="threshold-unit">일 이하</span>
+        </div>
+      </div>
+      <div class="threshold-row">
+        <span class="threshold-label">🟡 노란색 기준</span>
+        <div class="threshold-input-wrap">
+          <input type="number" id="yellowThresholdInput" min="0" inputmode="numeric" />
+          <span class="threshold-unit">일 이하</span>
+        </div>
+      </div>
+      <button type="button" class="btn btn-primary" id="thresholdSaveBtn" style="margin-top: 12px;">
+        저장
+      </button>
+      <p class="status" id="thresholdStatus"></p>
+    </section>
+    <p class="list-sort-note">
+      🔴 사용기한이 임박한 제품<br />
+      🟡 미리 준비하면 좋은 제품<br />
+      🟢 아직 여유가 있는 제품
     </p>
 
     <h2 class="settings-section-title">데이터 관리</h2>
@@ -1233,6 +1316,11 @@ const sheetCancelBtn = document.getElementById("sheetCancelBtn");
 
 const settingsBtn = document.getElementById("settingsBtn");
 const settingsApiKeyCard = document.getElementById("settingsApiKeyCard");
+
+const redThresholdInput = document.getElementById("redThresholdInput");
+const yellowThresholdInput = document.getElementById("yellowThresholdInput");
+const thresholdSaveBtn = document.getElementById("thresholdSaveBtn");
+const thresholdStatus = document.getElementById("thresholdStatus");
 
 const keyRequiredBackdrop = document.getElementById("keyRequiredBackdrop");
 const keyRequiredEnterBtn = document.getElementById("keyRequiredEnterBtn");
@@ -1480,7 +1568,55 @@ function renderSettings() {
       openKeyInputModal();
     });
   }
+
+  // 신호등 기준 입력값도 최신 상태로 채워 넣는다
+  redThresholdInput.value = RED_THRESHOLD_DAYS;
+  yellowThresholdInput.value = YELLOW_THRESHOLD_DAYS;
+  thresholdStatus.textContent = "";
+  thresholdStatus.classList.remove("error", "success");
 }
+
+// 신호등 기준 저장 - 빨간색 기준은 반드시 노란색 기준보다 작아야 한다
+thresholdSaveBtn.addEventListener("click", () => {
+  const redVal = Number(redThresholdInput.value);
+  const yellowVal = Number(yellowThresholdInput.value);
+
+  if (
+    redThresholdInput.value === "" ||
+    yellowThresholdInput.value === "" ||
+    !Number.isFinite(redVal) ||
+    !Number.isFinite(yellowVal)
+  ) {
+    thresholdStatus.textContent = "숫자를 입력해주세요.";
+    thresholdStatus.classList.remove("success");
+    thresholdStatus.classList.add("error");
+    return;
+  }
+  if (redVal < 0 || yellowVal < 0) {
+    thresholdStatus.textContent = "0 이상의 숫자를 입력해주세요.";
+    thresholdStatus.classList.remove("success");
+    thresholdStatus.classList.add("error");
+    return;
+  }
+  if (redVal >= yellowVal) {
+    thresholdStatus.textContent = "빨간색 기준은 노란색 기준보다 작아야 합니다.";
+    thresholdStatus.classList.remove("success");
+    thresholdStatus.classList.add("error");
+    return;
+  }
+
+  RED_THRESHOLD_DAYS = redVal;
+  YELLOW_THRESHOLD_DAYS = yellowVal;
+  saveThresholdsToStorage();
+
+  thresholdStatus.textContent = "저장되었습니다.";
+  thresholdStatus.classList.remove("error");
+  thresholdStatus.classList.add("success");
+
+  // 기준이 바뀌었으므로 홈/목록의 신호등 상태를 즉시 다시 계산해서 반영
+  renderHome();
+  renderList();
+});
 
 /* =========================================================================
    1-5. 데이터 백업 / 복원
@@ -2212,16 +2348,53 @@ function deleteProduct(id) {
 /* =========================================================================
    5. D-Day 계산 / 신호등 상태
    ------------------------------------------------------------------------
-   상태 기준 (요청서에 명시된 "빨간 상태(D-7 이하)" 기준을 따르고,
-   노란색/초록색 경계는 화장품 소비기한 도메인에서 통상적으로 쓰이는
-   기준을 임의로 적용했습니다. 필요시 아래 두 숫자만 조정하면 됩니다.):
+   상태 기준은 설정 화면에서 사용자가 직접 조정할 수 있으며, localStorage에
+   저장되어 앱을 다시 실행해도 유지된다. 저장된 값이 없으면 기본값
+   (빨간색 7일 이하 / 노란색 30일 이하)을 사용한다.
      - ⚫ expired : 소비기한이 이미 지남 (D+1 이상, 죽은색/회색)
-     - 🔴 red     : D-DAY ~ D-7
-     - 🟡 yellow  : D-8 ~ D-30
-     - 🟢 green   : D-31 이상
+     - 🔴 red     : 남은 날짜 <= 빨간색 기준
+     - 🟡 yellow  : 빨간색 기준 < 남은 날짜 <= 노란색 기준
+     - 🟢 green   : 남은 날짜 > 노란색 기준
    ========================================================================= */
-const RED_THRESHOLD_DAYS = 7;
-const YELLOW_THRESHOLD_DAYS = 30;
+const THRESHOLD_STORAGE_KEY = "coshelf_thresholds";
+let RED_THRESHOLD_DAYS = 7;
+let YELLOW_THRESHOLD_DAYS = 30;
+
+// localStorage에 저장된 신호등 기준을 불러온다. 값이 없거나 형식이
+// 잘못되었거나(빨간색 >= 노란색) 저장 자체가 없으면 기본값을 그대로 사용한다.
+function loadThresholdsFromStorage() {
+  try {
+    const raw = localStorage.getItem(THRESHOLD_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      Number.isFinite(parsed.red) &&
+      Number.isFinite(parsed.yellow) &&
+      parsed.red >= 0 &&
+      parsed.yellow >= 0 &&
+      parsed.red < parsed.yellow
+    ) {
+      RED_THRESHOLD_DAYS = parsed.red;
+      YELLOW_THRESHOLD_DAYS = parsed.yellow;
+    }
+  } catch (e) {
+    console.error("[localStorage] 신호등 기준을 불러오지 못했습니다:", e);
+  }
+}
+
+function saveThresholdsToStorage() {
+  try {
+    localStorage.setItem(
+      THRESHOLD_STORAGE_KEY,
+      JSON.stringify({ red: RED_THRESHOLD_DAYS, yellow: YELLOW_THRESHOLD_DAYS })
+    );
+  } catch (e) {
+    console.error("[localStorage] 신호등 기준을 저장하지 못했습니다:", e);
+  }
+}
+
+loadThresholdsFromStorage(); // 앱 시작 시 곧바로 사용자 설정값을 반영
 
 function computeDday(expiryStr) {
   const today = new Date();
@@ -2260,12 +2433,33 @@ const homeEmpty = document.getElementById("homeEmpty");
 
 function renderHome() {
   const withDday = products.map((p) => ({ ...p, dday: computeDday(p.expiryDate) }));
-  // days 오름차순 정렬만으로 이미 "지난 제품(음수)"이 "임박한 제품(0~7)"보다
+
+  // days 오름차순 정렬만으로 이미 "지난 제품(음수)"이 "임박한 제품"보다
   // 자연스럽게 앞에 오므로 회색 제품이 빨간 제품보다 위에 표시된다.
   const urgentItems = withDday
     .filter((p) => p.dday.status === "expired" || p.dday.status === "red")
     .sort((a, b) => a.dday.days - b.dday.days);
+  const warningItems = withDday
+    .filter((p) => p.dday.status === "yellow")
+    .sort((a, b) => a.dday.days - b.dday.days);
 
+  const homeCardHtml = (p) => `
+    <div class="home-card">
+      <span class="status-dot">${statusEmoji(p.dday.status)}</span>
+      <div class="thumb">${
+        p.imageDataUrl
+          ? `<img src="${p.imageDataUrl}" alt="${escapeHtml(p.product)}" />`
+          : "🧴"
+      }</div>
+      <div class="info">
+        ${p.brand ? `<div class="brand">${escapeHtml(p.brand)}</div>` : ""}
+        <div class="product-name">${productNameLabel(p)}</div>
+      </div>
+      <span class="dday-pill ${p.dday.status}">${p.dday.label}</span>
+    </div>
+  `;
+
+  // 우선순위: 🔴(임박/만료) > 🟡(주의) > 🟢(안심) - 가장 급한 상태 하나만 보여준다
   if (urgentItems.length > 0) {
     homeHero.className = "home-hero is-urgent";
     homeHero.innerHTML = `
@@ -2274,22 +2468,16 @@ function renderHome() {
     `;
     homeList.style.display = "flex";
     homeEmpty.style.display = "none";
-
-    homeList.innerHTML = urgentItems.map((p) => `
-      <div class="home-card">
-        <span class="status-dot">${statusEmoji(p.dday.status)}</span>
-        <div class="thumb">${
-          p.imageDataUrl
-            ? `<img src="${p.imageDataUrl}" alt="${escapeHtml(p.product)}" />`
-            : "🧴"
-        }</div>
-        <div class="info">
-          ${p.brand ? `<div class="brand">${escapeHtml(p.brand)}</div>` : ""}
-          <div class="product-name">${productNameLabel(p)}</div>
-        </div>
-        <span class="dday-pill ${p.dday.status}">${p.dday.label}</span>
-      </div>
-    `).join("");
+    homeList.innerHTML = urgentItems.map(homeCardHtml).join("");
+  } else if (warningItems.length > 0) {
+    homeHero.className = "home-hero is-warning";
+    homeHero.innerHTML = `
+      <p class="line1">이 친구,</p>
+      <p class="line2">미리 챙겨두세요.</p>
+    `;
+    homeList.style.display = "flex";
+    homeEmpty.style.display = "none";
+    homeList.innerHTML = warningItems.map(homeCardHtml).join("");
   } else {
     homeHero.className = "home-hero is-safe";
     homeHero.innerHTML = `
