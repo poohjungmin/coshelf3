@@ -95,6 +95,24 @@
   }
   .settings-btn:active { opacity: 0.6; }
 
+  /* 등록/수정 화면 진입 시 설정 버튼 자리에 대신 나타나는 뒤로가기 버튼
+     (메인 화면의 ⚙️ 버튼과 동일한 위치 로직/터치 영역, 좌우만 대칭 반전) */
+  .back-btn {
+    position: absolute;
+    top: 8px;
+    left: 0;
+    background: none;
+    border: none;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .back-btn:active { opacity: 0.6; }
+
   /* ---------------- 화면 전환 ---------------- */
   .screen { display: none; animation: fadeIn 0.25s ease; }
   .screen.active { display: block; }
@@ -124,35 +142,6 @@
     letter-spacing: 0.4px;
     margin: 0 0 14px;
   }
-
-  /* 등록/수정 화면 - 메인 화면 헤더와 동일한 좌우 여백/정렬 구조
-     (좌측: 뒤로가기, 가운데: 제목, 우측: 설정 버튼 자리만큼 여백 확보) */
-  .result-card-header {
-    position: relative;
-    text-align: center;
-    padding: 4px 0;
-    margin: 0 0 14px;
-    min-height: 32px;
-  }
-  .result-card-header h2 {
-    margin: 0;
-  }
-  .back-btn {
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    background: none;
-    border: none;
-    font-size: 26px;
-    font-weight: 700;
-    line-height: 1;
-    padding: 6px;
-    color: var(--accent);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .back-btn:active { opacity: 0.6; }
 
   /* ---------------- 업로드 영역 ---------------- */
   .upload-zone {
@@ -957,6 +946,7 @@
 <div class="app">
 
   <header class="top">
+    <button type="button" class="back-btn" id="registerBackBtn" aria-label="뒤로가기" style="display:none;">‹</button>
     <button type="button" class="settings-btn" id="settingsBtn" aria-label="설정">⚙️</button>
     <h1>Coshelf</h1>
   </header>
@@ -1007,10 +997,7 @@
 
     <!-- 2-3. 결과 카드 (분석 후 / 직접입력 / 수정 시 노출) -->
     <section class="card" id="resultCard" style="display:none;">
-      <div class="result-card-header">
-        <button type="button" class="back-btn" id="registerBackBtn" aria-label="뒤로가기">‹</button>
-        <h2 id="resultCardTitle">제품 정보 (직접 수정 가능)</h2>
-      </div>
+      <h2 id="resultCardTitle">제품 정보 (직접 수정 가능)</h2>
 
       <div class="result-field">
         <label for="brandInput">브랜드</label>
@@ -1389,6 +1376,11 @@ function showScreen(screenId) {
 
   // 검색창은 목록 화면에서만 하단 탭바 위에 노출
   listSearchBar.classList.toggle("visible", screenId === "screen-list");
+
+  // 헤더 좌측 아이콘: 등록/수정 화면에서는 뒤로가기, 그 외에는 설정(⚙️)
+  const isRegisterScreen = screenId === "screen-register";
+  registerBackBtn.style.display = isRegisterScreen ? "block" : "none";
+  settingsBtn.style.display = isRegisterScreen ? "none" : "block";
 
   if (screenId === "screen-home") renderHome();
   if (screenId === "screen-list") renderList();
