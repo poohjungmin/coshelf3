@@ -99,6 +99,9 @@
   .screen { display: none; animation: fadeIn 0.25s ease; }
   .screen.active { display: block; }
 
+  /* 목록 화면은 하단에 검색창이 추가로 붙으므로 여백을 더 확보 */
+  #screen-list { padding-bottom: 56px; }
+
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
@@ -502,6 +505,39 @@
   }
 
   /* ============================================================
+     등록 화면 - 즐겨찾기 토글
+     ============================================================ */
+  .favorite-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: #ffffff;
+  }
+
+  .favorite-toggle-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .favorite-star-btn {
+    border: none;
+    background: none;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    color: #d1d1d6;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s ease, color 0.15s ease;
+  }
+  .favorite-star-btn.active { color: #ffcc00; }
+  .favorite-star-btn:active { transform: scale(0.85); }
+
+  /* ============================================================
      등록 화면 - 저장 버튼
      ============================================================ */
   .save-btn {
@@ -509,13 +545,70 @@
   }
 
   /* ============================================================
-     하단 탭바
+     하단 고정 영역 (검색창 + 하단 탭바)
      ============================================================ */
-  .tabbar {
+  .bottom-dock {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
+    z-index: 50;
+  }
+
+  .list-search-bar {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    max-width: 460px;
+    margin: 0 auto;
+    padding: 10px 16px;
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: saturate(180%) blur(16px);
+    -webkit-backdrop-filter: saturate(180%) blur(16px);
+    border-top: 1px solid var(--border);
+  }
+  .list-search-bar.visible { display: flex; }
+
+  .list-search-bar input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    font-size: 15px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+  .list-search-bar input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: #ffffff;
+  }
+
+  .search-clear-btn {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.05s ease;
+  }
+  .search-clear-btn:active { transform: scale(0.9); }
+  .search-clear-btn:hover { background: rgba(255,59,48,0.12); color: var(--danger); }
+
+  /* ============================================================
+     하단 탭바
+     ============================================================ */
+  .tabbar {
     display: flex;
     justify-content: center;
     align-items: flex-end;
@@ -525,7 +618,6 @@
     -webkit-backdrop-filter: saturate(180%) blur(16px);
     border-top: 1px solid var(--border);
     padding: 8px 0 max(10px, env(safe-area-inset-bottom));
-    z-index: 50;
   }
 
   .tabbar-inner {
@@ -847,6 +939,13 @@
         />
       </div>
 
+      <div class="result-field">
+        <div class="favorite-toggle">
+          <span class="favorite-toggle-label">⭐ 즐겨찾기</span>
+          <button type="button" class="favorite-star-btn" id="favoriteToggleBtn" aria-pressed="false">★</button>
+        </div>
+      </div>
+
       <button class="btn btn-primary save-btn" id="saveBtn" type="button">
         저장하기
       </button>
@@ -870,7 +969,7 @@
   </section>
 
   <!-- ============================================================
-       화면 4) 설정 - Gemini API Key 확인 / 변경 / 삭제
+       화면 4) 설정 - Gemini API Key 확인 / 변경 / 삭제 + 데이터 백업/복원
        ============================================================ -->
   <section class="screen" id="screen-settings">
     <h2 class="settings-section-title">AI 사진 인식 (Gemini API Key)</h2>
@@ -881,26 +980,49 @@
       API Key는 이 기기의 브라우저(localStorage)에만 저장되며, 외부로 전송되지 않습니다.
       Key가 없어도 앱의 다른 기능(등록/목록/수정/삭제/필터)은 그대로 사용할 수 있습니다.
     </p>
+
+    <h2 class="settings-section-title">데이터 관리</h2>
+    <section class="card">
+      <button type="button" class="btn btn-secondary" id="settingsBackupBtn" style="margin-bottom: 10px;">
+        데이터 백업
+      </button>
+      <button type="button" class="btn btn-secondary" id="settingsRestoreBtn">
+        데이터 복원
+      </button>
+      <input type="file" id="restoreFileInput" accept="application/json,.json" style="display:none;" />
+      <p class="status" id="dataManageStatus"></p>
+    </section>
+    <p class="list-sort-note">
+      백업은 사진(이미지)을 포함한 전체 제품 데이터를 JSON 파일로 저장합니다.
+      복원 전에는 항상 현재 데이터를 자동으로 먼저 백업합니다.
+    </p>
   </section>
 
 </div>
 
 <!-- ============================================================
-     하단 탭바 - 홈 / 등록 / 목록
+     하단 고정 영역 - 목록 화면에서만 보이는 검색창 + 하단 탭바
      ============================================================ -->
-<nav class="tabbar">
-  <div class="tabbar-inner">
-    <button type="button" class="tab-btn active" id="tabHomeBtn" data-screen="screen-home">
-      <span class="tab-icon">🏠</span>홈
-    </button>
-    <button type="button" class="tab-btn tab-add" id="tabRegisterBtn" data-screen="screen-register">
-      <span class="tab-icon">➕</span>등록
-    </button>
-    <button type="button" class="tab-btn" id="tabListBtn" data-screen="screen-list">
-      <span class="tab-icon">📋</span>목록
-    </button>
+<div class="bottom-dock" id="bottomDock">
+  <div class="list-search-bar" id="listSearchBar">
+    <input type="text" id="searchInput" placeholder="브랜드 또는 제품명 검색" autocomplete="off" />
+    <button type="button" class="search-clear-btn" id="searchClearBtn" aria-label="검색어 지우기" style="display:none;">✕</button>
   </div>
-</nav>
+
+  <nav class="tabbar">
+    <div class="tabbar-inner">
+      <button type="button" class="tab-btn active" id="tabHomeBtn" data-screen="screen-home">
+        <span class="tab-icon">🏠</span>홈
+      </button>
+      <button type="button" class="tab-btn tab-add" id="tabRegisterBtn" data-screen="screen-register">
+        <span class="tab-icon">➕</span>등록
+      </button>
+      <button type="button" class="tab-btn" id="tabListBtn" data-screen="screen-list">
+        <span class="tab-icon">📋</span>목록
+      </button>
+    </div>
+  </nav>
+</div>
 
 <!-- ============================================================
      등록 방식 선택 Action Sheet (하단 + 버튼을 누르면 표시)
@@ -947,6 +1069,24 @@ API Key는 내 기기에만 저장되며
     </button>
   </div>
 </div>
+
+<!-- ============================================================
+     데이터 복원 확인 모달
+     ============================================================ -->
+<div class="modal-backdrop" id="restoreConfirmBackdrop">
+  <div class="modal-card">
+    <h3>백업 파일로 복원할까요?</h3>
+    <p>현재 데이터를 자동으로 백업했습니다.
+
+선택한 백업 파일로 복원하시겠습니까?
+기존 데이터는 덮어쓰기됩니다.</p>
+    <div class="modal-btn-group">
+      <button type="button" class="btn btn-primary" id="restoreConfirmBtn">복원하기</button>
+      <button type="button" class="btn btn-secondary" id="restoreCancelBtn">취소</button>
+    </div>
+  </div>
+</div>
+
 
 <script>
 /* =============================================================
@@ -1030,11 +1170,28 @@ const apiKeyInputStatus = document.getElementById("apiKeyInputStatus");
 const apiKeySaveBtn = document.getElementById("apiKeySaveBtn");
 const apiKeyFreeLinkBtn = document.getElementById("apiKeyFreeLinkBtn");
 
+const favoriteToggleBtn = document.getElementById("favoriteToggleBtn");
+
+const listSearchBar = document.getElementById("listSearchBar");
+const searchInput = document.getElementById("searchInput");
+const searchClearBtn = document.getElementById("searchClearBtn");
+
+const settingsBackupBtn = document.getElementById("settingsBackupBtn");
+const settingsRestoreBtn = document.getElementById("settingsRestoreBtn");
+const restoreFileInput = document.getElementById("restoreFileInput");
+const dataManageStatus = document.getElementById("dataManageStatus");
+const restoreConfirmBackdrop = document.getElementById("restoreConfirmBackdrop");
+const restoreConfirmBtn = document.getElementById("restoreConfirmBtn");
+const restoreCancelBtn = document.getElementById("restoreCancelBtn");
+
 let selectedBase64 = null;      // 업로드한 이미지의 base64 데이터 (data URL 포함)
 let selectedMimeType = null;    // 이미지 MIME 타입 (image/png, image/jpeg 등)
 let currentSourceMode = "album"; // "album" | "manual"
 let editingProductId = null;    // null이면 신규 등록, 값이 있으면 해당 id의 제품을 수정 중
 let pendingAiMode = null;       // API Key 입력 후 자동으로 이어서 진행할 모드("album")
+let currentFavorite = false;    // 등록/수정 폼에서 현재 즐겨찾기 ON/OFF 상태
+let currentSearchQuery = "";    // 목록 화면 검색어 (소문자로 정규화되어 저장됨)
+let pendingRestoreProducts = null; // 복원 확인 대기 중인 백업 파일의 products 배열
 
 // 앱 실행 시에는 API Key 관련 안내를 별도로 띄우지 않고 바로 홈 화면으로 진입합니다.
 // (Key가 없어도 앱은 정상 사용 가능 - AI 사진 인식 기능만 사용 시점에 확인합니다)
@@ -1057,6 +1214,9 @@ function showScreen(screenId) {
   tabButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.screen === screenId);
   });
+
+  // 검색창은 목록 화면에서만 하단 탭바 위에 노출
+  listSearchBar.classList.toggle("visible", screenId === "screen-list");
 
   if (screenId === "screen-home") renderHome();
   if (screenId === "screen-list") renderList();
@@ -1239,6 +1399,125 @@ function renderSettings() {
 }
 
 /* =========================================================================
+   1-5. 데이터 백업 / 복원
+   ------------------------------------------------------------------------
+   백업: 현재 products 배열(이미지 base64 포함) 전체를 JSON 파일로 다운로드.
+   복원: 선택한 JSON 파일이 Coshelf 백업 형식인지 검증한 뒤,
+        복원을 진행하기 전에 먼저 현재 데이터를 자동으로 백업(다운로드)하고,
+        확인 모달에서 "복원하기"를 누르면 products를 통째로 교체한다.
+   ========================================================================= */
+function todayDateString() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// 현재 products를 Coshelf 백업 형식의 JSON 파일로 다운로드한다.
+function downloadBackupFile() {
+  const payload = {
+    app: "coshelf",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    products: products,
+  };
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `coshelf_backup_${todayDateString()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+settingsBackupBtn.addEventListener("click", () => {
+  downloadBackupFile();
+  dataManageStatus.textContent = "데이터 백업이 완료되었습니다.";
+  dataManageStatus.classList.remove("error");
+  dataManageStatus.classList.add("success");
+});
+
+settingsRestoreBtn.addEventListener("click", () => {
+  restoreFileInput.value = ""; // 같은 파일을 다시 선택해도 change 이벤트가 발생하도록 초기화
+  restoreFileInput.click();
+});
+
+restoreFileInput.addEventListener("change", () => {
+  const file = restoreFileInput.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let parsed;
+    try {
+      parsed = JSON.parse(e.target.result);
+    } catch (err) {
+      console.error("[백업 복원] JSON 파싱 실패:", err);
+      dataManageStatus.textContent = "올바른 백업 파일이 아닙니다.";
+      dataManageStatus.classList.remove("success");
+      dataManageStatus.classList.add("error");
+      restoreFileInput.value = "";
+      return;
+    }
+
+    // Coshelf 백업 형식이 아니면 기존 데이터를 절대 건드리지 않고 중단
+    if (!parsed || parsed.app !== "coshelf" || !Array.isArray(parsed.products)) {
+      dataManageStatus.textContent = "올바른 백업 파일이 아닙니다.";
+      dataManageStatus.classList.remove("success");
+      dataManageStatus.classList.add("error");
+      restoreFileInput.value = "";
+      return;
+    }
+
+    // ① 복원을 진행하기 전에 현재 데이터를 자동으로 먼저 백업(다운로드)한다
+    downloadBackupFile();
+
+    // ② 복원 여부 확인 모달을 띄운다 (③ 확인을 눌러야 실제로 교체됨)
+    pendingRestoreProducts = parsed.products;
+    restoreConfirmBackdrop.classList.add("open");
+  };
+  reader.readAsText(file);
+});
+
+restoreConfirmBackdrop.addEventListener("click", (e) => {
+  if (e.target === restoreConfirmBackdrop) {
+    pendingRestoreProducts = null;
+    restoreConfirmBackdrop.classList.remove("open");
+    restoreFileInput.value = "";
+  }
+});
+
+restoreCancelBtn.addEventListener("click", () => {
+  pendingRestoreProducts = null;
+  restoreConfirmBackdrop.classList.remove("open");
+  restoreFileInput.value = "";
+});
+
+// ③ 확인 -> 실제 복원 진행: products 교체 + localStorage 저장 + 홈/목록/카테고리/검색 즉시 갱신
+restoreConfirmBtn.addEventListener("click", () => {
+  if (!pendingRestoreProducts) return;
+
+  products = pendingRestoreProducts;
+  pendingRestoreProducts = null;
+  saveProductsToStorage();
+
+  renderHome();
+  renderList();
+
+  restoreConfirmBackdrop.classList.remove("open");
+  restoreFileInput.value = "";
+
+  dataManageStatus.textContent = `총 ${products.length}개의 제품을 복원했습니다.`;
+  dataManageStatus.classList.remove("error");
+  dataManageStatus.classList.add("success");
+});
+
+/* =========================================================================
    2. 등록 화면 - 사진 소스에 따라 카드 표시/숨김 (사진 업로드 / 직접입력)
    ========================================================================= */
 function setSourceMode(mode) {
@@ -1252,6 +1531,8 @@ function setSourceMode(mode) {
   resultCard.style.display = "none";
   previewBox.innerHTML = "사진을 선택하면<br />여기에 미리보기가 표시됩니다";
   analyzeBtn.disabled = true;
+  currentFavorite = false;
+  updateFavoriteToggleUI();
 
   if (mode === "album") {
     uploadCard.style.display = "block";
@@ -1273,6 +1554,22 @@ function setSourceMode(mode) {
 previewBox.addEventListener("click", (e) => {
   e.preventDefault();
   if (currentSourceMode === "album") albumInput.click();
+});
+
+/* =========================================================================
+   2-0. 즐겨찾기 토글 (등록/수정 화면 공용)
+   ------------------------------------------------------------------------
+   즐겨찾기는 카테고리 값을 바꾸는 것이 아니라 별도의 boolean 플래그(favorite)다.
+   같은 제품이 기존 카테고리와 "⭐ 즐겨찾기" 둘 다에 동시에 속할 수 있다.
+   ========================================================================= */
+function updateFavoriteToggleUI() {
+  favoriteToggleBtn.classList.toggle("active", currentFavorite);
+  favoriteToggleBtn.setAttribute("aria-pressed", String(currentFavorite));
+}
+
+favoriteToggleBtn.addEventListener("click", () => {
+  currentFavorite = !currentFavorite;
+  updateFavoriteToggleUI();
 });
 
 // ---------------------------------------------------------------
@@ -1664,6 +1961,7 @@ saveBtn.addEventListener("click", () => {
       target.category = categoryInput.value.trim();
       target.expiryDate = expiryDate;
       target.imageDataUrl = selectedBase64; // 사진을 새로 고르지 않았다면 기존 값 그대로 유지됨
+      target.favorite = currentFavorite;
     }
   } else {
     // 신규 제품 등록
@@ -1675,6 +1973,7 @@ saveBtn.addEventListener("click", () => {
       expiryDate: expiryDate,
       imageDataUrl: selectedBase64, // 직접입력 모드에서는 null일 수 있음
       createdAt: new Date().toISOString(),
+      favorite: currentFavorite,
     });
   }
 
@@ -1736,6 +2035,8 @@ function openEditProduct(id) {
   categoryInput.value = p.category || "";
   categoryInput.classList.remove("is-null");
   expiryInput.value = p.expiryDate || "";
+  currentFavorite = !!p.favorite;
+  updateFavoriteToggleUI();
 
   statusText.textContent = "";
   statusText.classList.remove("error");
@@ -1859,11 +2160,22 @@ const listContainer = document.getElementById("listContainer");
 const listEmpty = document.getElementById("listEmpty");
 const categoryFilter = document.getElementById("categoryFilter");
 
-let currentCategoryFilter = "전체"; // "전체" 또는 products에 실제 존재하는 category 값
+let currentCategoryFilter = "전체"; // "전체" | FAVORITE_FILTER_VALUE | products에 실제 존재하는 category 값
+const FAVORITE_FILTER_VALUE = "__favorite__"; // "⭐ 즐겨찾기" 칩에 쓰는 내부 식별자 (실제 category 값과 겹치지 않도록 구분)
+const FAVORITE_FILTER_LABEL = "⭐ 즐겨찾기";
 
 function matchesCategoryFilter(p) {
   if (currentCategoryFilter === "전체") return true;
+  if (currentCategoryFilter === FAVORITE_FILTER_VALUE) return !!p.favorite;
   return (p.category || "").trim() === currentCategoryFilter;
+}
+
+// 브랜드/제품명 검색 (대소문자 구분 없음). 검색어가 비어있으면 항상 통과시킨다.
+function matchesSearchQuery(p) {
+  if (!currentSearchQuery) return true;
+  const brand = (p.brand || "").toLowerCase();
+  const product = (p.product || "").toLowerCase();
+  return brand.includes(currentSearchQuery) || product.includes(currentSearchQuery);
 }
 
 // products에 실제로 존재하는 category만 중복 없이, 가나다순으로 추출
@@ -1877,21 +2189,35 @@ function getAvailableCategories() {
 }
 
 // 카테고리 필터 칩을 products 기준으로 다시 그린다.
-// "전체"는 항상 맨 앞에 고정하고, 그 뒤에 실제 등록된 카테고리만 나열한다.
-// 제품이 모두 삭제되어 사라진 카테고리는 자동으로 칩 목록에서도 빠지고,
-// 그 카테고리가 현재 선택되어 있었다면 "전체"로 되돌린다.
+// "전체"는 항상 맨 앞에 고정하고, 즐겨찾기 제품이 하나라도 있으면 그 바로 뒤에
+// "⭐ 즐겨찾기" 칩을 추가한 뒤, 실제 등록된 카테고리를 나열한다.
+// 제품이 모두 삭제되어 사라진 카테고리(또는 즐겨찾기가 모두 해제된 경우)는
+// 자동으로 칩 목록에서도 빠지고, 그 항목이 현재 선택되어 있었다면 "전체"로 되돌린다.
 function renderCategoryFilter() {
   const categories = getAvailableCategories();
+  const hasFavorites = products.some((p) => p.favorite);
 
-  if (currentCategoryFilter !== "전체" && !categories.includes(currentCategoryFilter)) {
+  if (
+    currentCategoryFilter !== "전체" &&
+    currentCategoryFilter !== FAVORITE_FILTER_VALUE &&
+    !categories.includes(currentCategoryFilter)
+  ) {
+    currentCategoryFilter = "전체";
+  }
+  if (currentCategoryFilter === FAVORITE_FILTER_VALUE && !hasFavorites) {
     currentCategoryFilter = "전체";
   }
 
-  const chipHtml = (label) => `
-    <button type="button" class="category-chip${currentCategoryFilter === label ? " active" : ""}" data-category="${escapeHtml(label)}">${escapeHtml(label)}</button>
+  const chipHtml = (label, value) => `
+    <button type="button" class="category-chip${currentCategoryFilter === value ? " active" : ""}" data-category="${escapeHtml(value)}">${escapeHtml(label)}</button>
   `;
 
-  categoryFilter.innerHTML = chipHtml("전체") + categories.map(chipHtml).join("");
+  const favoriteChip = hasFavorites ? chipHtml(FAVORITE_FILTER_LABEL, FAVORITE_FILTER_VALUE) : "";
+
+  categoryFilter.innerHTML =
+    chipHtml("전체", "전체") +
+    favoriteChip +
+    categories.map((c) => chipHtml(c, c)).join("");
 }
 
 function renderList() {
@@ -1900,14 +2226,19 @@ function renderList() {
   const withDday = products
     .map((p) => ({ ...p, dday: computeDday(p.expiryDate) }))
     .filter(matchesCategoryFilter)
+    .filter(matchesSearchQuery)
     .sort((a, b) => a.dday.days - b.dday.days); // 소비기한이 가까운 순
 
   if (withDday.length === 0) {
     listContainer.innerHTML = "";
-    listEmpty.textContent =
-      products.length === 0
-        ? "아직 등록된 제품이 없습니다."
-        : "해당 카테고리의 제품이 없습니다.";
+    if (currentSearchQuery) {
+      listEmpty.textContent = "검색 결과가 없습니다.";
+    } else {
+      listEmpty.textContent =
+        products.length === 0
+          ? "아직 등록된 제품이 없습니다."
+          : "해당 카테고리의 제품이 없습니다.";
+    }
     listEmpty.style.display = "block";
     return;
   }
@@ -1941,6 +2272,23 @@ categoryFilter.addEventListener("click", (e) => {
   if (!chip) return;
   currentCategoryFilter = chip.dataset.category;
   renderList();
+});
+
+/* =========================================================================
+   7-1. 목록 검색 (브랜드/제품명, 대소문자 구분 없음)
+   ========================================================================= */
+searchInput.addEventListener("input", () => {
+  currentSearchQuery = searchInput.value.trim().toLowerCase();
+  searchClearBtn.style.display = currentSearchQuery ? "flex" : "none";
+  renderList();
+});
+
+searchClearBtn.addEventListener("click", () => {
+  searchInput.value = "";
+  currentSearchQuery = "";
+  searchClearBtn.style.display = "none";
+  renderList();
+  searchInput.focus();
 });
 
 // 목록의 수정/삭제 버튼 또는 행 자체 클릭을 이벤트 위임으로 처리
