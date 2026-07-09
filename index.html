@@ -1,0 +1,1979 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>화장품 AI 인식 데모</title>
+<style>
+  /* ============================================================
+     전역 스타일 - 아이폰 기본 앱 느낌 (흰 배경 / 넓은 여백 / 둥근 카드 / 은은한 그림자)
+     ============================================================ */
+  :root {
+    --bg: #ffffff;
+    --surface: #f6f6f8;          /* 카드 바탕 (iOS 그룹 배경톤) */
+    --border: #e5e5ea;           /* iOS 구분선 컬러 */
+    --text-primary: #1c1c1e;     /* iOS 라벨 컬러 */
+    --text-secondary: #8a8a8e;   /* iOS 보조 텍스트 */
+    --accent: #007aff;           /* iOS 시스템 블루 */
+    --accent-pressed: #0062cc;
+    --danger: #ff3b30;           /* red 상태 */
+    --warning: #ff9f0a;          /* yellow 상태 */
+    --success: #34c759;          /* green 상태 */
+    --dead: #636366;             /* 소비기한이 지난(회색/죽은색) 상태 */
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-sm: 10px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 6px 16px rgba(0,0,0,0.03);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+      "Apple SD Gothic Neo", "Pretendard", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    padding: 0;
+  }
+
+  .app {
+    max-width: 460px;
+    margin: 0 auto;
+    padding: 28px 20px 110px; /* 하단 탭바만큼 여백 확보 */
+    min-height: 100vh;
+  }
+
+  header.top {
+    position: relative;
+    text-align: center;
+    padding: 12px 0 30px;
+  }
+
+  header.top h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.3px;
+  }
+
+  header.top p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .settings-btn {
+    position: absolute;
+    top: 8px;
+    right: 0;
+    background: none;
+    border: none;
+    font-size: 20px;
+    line-height: 1;
+    padding: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .settings-btn:active { opacity: 0.6; }
+
+  /* ---------------- 화면 전환 ---------------- */
+  .screen { display: none; animation: fadeIn 0.25s ease; }
+  .screen.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ---------------- 공통 카드 ---------------- */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .card h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin: 0 0 14px;
+  }
+
+  /* ---------------- 업로드 영역 ---------------- */
+  .upload-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .preview-box {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--radius-md);
+    background: #ffffff;
+    border: 1.5px dashed var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: center;
+    padding: 12px;
+  }
+
+  .preview-box img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  input[type="file"] { display: none; }
+
+  .btn {
+    width: 100%;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.05s ease, background 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn:active { transform: scale(0.98); }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent-pressed); }
+  .btn-primary:disabled {
+    background: #b9d8ff;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    background: #ffffff;
+    color: var(--accent);
+    border: 1px solid var(--border);
+  }
+
+  /* ---------------- 결과 카드 ---------------- */
+  .result-field {
+    margin-bottom: 14px;
+  }
+  .result-field:last-child { margin-bottom: 0; }
+
+  .result-field label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+
+  .result-field input {
+    width: 100%;
+    font-size: 16px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: #ffffff;
+    color: var(--text-primary);
+    outline: none;
+    font-family: inherit;
+  }
+
+  .result-field input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+  }
+
+  .result-field input.is-null {
+    color: var(--danger);
+  }
+  .result-field input.is-null::placeholder { color: var(--danger); }
+
+  /* ---------------- 상태 표시 ---------------- */
+  .status {
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-align: center;
+    margin: 10px 0 0;
+    min-height: 18px;
+  }
+  .status.error { color: var(--danger); }
+  .status.success { color: var(--success); }
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #d8d8dc;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: -2px;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .key-warning {
+    font-size: 12px;
+    color: var(--danger);
+    background: #fff1f0;
+    border: 1px solid #ffd6d3;
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  /* ============================================================
+     홈 화면
+     ============================================================ */
+  .home-hero {
+    text-align: center;
+    padding: 10px 0 28px;
+  }
+
+  .home-hero .line1 {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .home-hero .line2 {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+    margin: 2px 0 0;
+  }
+
+  .home-hero.is-safe .line2 { color: var(--text-primary); }
+  .home-hero.is-urgent .line2 { color: var(--danger); }
+
+  .home-empty {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding: 30px 0;
+  }
+
+  .home-empty .emoji-big {
+    font-size: 34px;
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  .home-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .home-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    box-shadow: var(--shadow);
+  }
+
+  .home-card .status-dot { font-size: 18px; line-height: 1; }
+
+  .home-card .thumb {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-sm);
+    background: #ffffff;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+  .home-card .thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+  .home-card .info { flex: 1; min-width: 0; }
+
+  .home-card .info .name {
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .home-card .info .category {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  .dday-pill {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 999px;
+  }
+  .dday-pill.red   { background: rgba(255,59,48,0.12); color: var(--danger); }
+  .dday-pill.yellow{ background: rgba(255,159,10,0.14); color: var(--warning); }
+  .dday-pill.green { background: rgba(52,199,89,0.12); color: var(--success); }
+  .dday-pill.expired { background: rgba(99,99,102,0.14); color: var(--dead); }
+
+  /* ============================================================
+     목록 화면
+     ============================================================ */
+  .list-sort-note {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0 4px 14px;
+  }
+
+  /* 카테고리 가로 스크롤 필터 */
+  .category-filter {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 2px 2px 16px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .category-filter::-webkit-scrollbar { display: none; }
+
+  .category-chip {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: #ffffff;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .category-chip:active { transform: scale(0.96); }
+  .category-chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .list-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .list-row:last-child { border-bottom: none; }
+
+  /* 신호등(🔴🟡🟢⚫) - 사진과 겹치지 않도록 별도 자리 배치 */
+  .list-row .status-badge {
+    flex-shrink: 0;
+    width: 20px;
+    font-size: 16px;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .list-row .thumb-wrap {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+  }
+
+  .list-row .thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .list-row .thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+  .list-row .info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .list-row .info .brand {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: normal;
+    word-break: keep-all;
+    line-height: 1.3;
+  }
+
+  .list-row .info .product-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: normal;
+    overflow: visible;
+    word-break: keep-all;
+    line-height: 1.4;
+  }
+
+  .edit-btn,
+  .delete-btn {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: none;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.05s ease;
+  }
+  .edit-btn:active,
+  .delete-btn:active { transform: scale(0.9); }
+  .delete-btn:hover { background: rgba(255,59,48,0.12); color: var(--danger); }
+  .edit-btn:hover { background: rgba(0,122,255,0.12); color: var(--accent); }
+
+  .list-empty {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding: 40px 0;
+  }
+
+  /* ============================================================
+     등록 화면 - 저장 버튼
+     ============================================================ */
+  .save-btn {
+    margin-top: 4px;
+  }
+
+  /* ============================================================
+     하단 탭바
+     ============================================================ */
+  .tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 0;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: saturate(180%) blur(16px);
+    -webkit-backdrop-filter: saturate(180%) blur(16px);
+    border-top: 1px solid var(--border);
+    padding: 8px 0 max(10px, env(safe-area-inset-bottom));
+    z-index: 50;
+  }
+
+  .tabbar-inner {
+    width: 100%;
+    max-width: 460px;
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-end;
+  }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 4px 18px;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s ease;
+  }
+
+  .tab-btn .tab-icon { font-size: 21px; line-height: 1; }
+
+  .tab-btn.active { color: var(--accent); }
+
+  /* 가운데 등록 탭 - 살짝 떠 있는 원형 버튼으로 강조 */
+  .tab-btn.tab-add .tab-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin-top: -22px;
+    box-shadow: 0 4px 12px rgba(0,122,255,0.32);
+    transition: transform 0.12s ease;
+  }
+  .tab-btn.tab-add:active .tab-icon { transform: scale(0.94); }
+  .tab-btn.tab-add.active { color: var(--text-secondary); }
+
+  /* ============================================================
+     등록 방식 선택 Action Sheet (iOS 스타일)
+     ============================================================ */
+  .sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 90;
+  }
+  .sheet-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .action-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: 460px;
+    margin: 0 auto;
+    /* 하단 탭바와 겹치지 않도록 safe-area + 탭바 높이만큼 여백 확보 */
+    padding: 0 10px calc(max(10px, env(safe-area-inset-bottom)) + 78px);
+    transform: translateY(115%);
+    transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+    z-index: 91;
+  }
+  .action-sheet.open { transform: translateY(0); }
+
+  .action-sheet-group {
+    background: rgba(255,255,255,0.98);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+
+  .action-sheet-btn {
+    display: block;
+    width: 100%;
+    border: none;
+    background: none;
+    padding: 16px;
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--accent);
+    cursor: pointer;
+    text-align: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .action-sheet-group .action-sheet-btn + .action-sheet-btn {
+    border-top: 1px solid var(--border);
+  }
+  .action-sheet-btn:active { background: rgba(0,0,0,0.04); }
+
+  /* 취소 버튼도 동일한 카드 안의 일반 선택지와 같은 스타일이되, 글자색만 빨간색 */
+  .action-sheet-cancel {
+    color: var(--danger);
+    font-weight: 600;
+  }
+
+  /* ============================================================
+     API Key 관련 모달 (필요 안내 / 입력)
+     ============================================================ */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 95;
+  }
+  .modal-backdrop.open { display: flex; }
+
+  .modal-card {
+    background: #ffffff;
+    border-radius: var(--radius-lg);
+    padding: 26px 22px;
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+    box-shadow: var(--shadow);
+  }
+
+  .modal-card h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0 0 10px;
+  }
+
+  .modal-card p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0 0 20px;
+    white-space: pre-line;
+  }
+
+  .modal-btn-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-card input[type="text"] {
+    width: 100%;
+    font-size: 15px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    margin-bottom: 10px;
+    text-align: left;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+  .modal-card input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+  }
+
+  .modal-card label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: left;
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+
+  .modal-link {
+    display: inline-block;
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    background: none;
+    border: none;
+  }
+  .modal-link:active { opacity: 0.6; }
+
+  /* ============================================================
+     설정 화면
+     ============================================================ */
+  .settings-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0 4px 10px;
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+  }
+
+  .settings-row .settings-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .settings-row .settings-value {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .settings-btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .settings-btn-row .btn {
+    width: auto;
+    flex: 1;
+    padding: 12px;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <button type="button" class="settings-btn" id="settingsBtn" aria-label="설정">⚙️</button>
+    <h1>내 화장품</h1>
+    <p>사진으로 등록하고 소비기한을 놓치지 마세요</p>
+  </header>
+
+  <!-- ============================================================
+       화면 1) 홈 - 소비기한이 임박한(빨간 상태) 제품만 노출
+       ============================================================ -->
+  <section class="screen active" id="screen-home">
+
+    <div class="home-hero" id="homeHero">
+      <p class="line1">이 친구,</p>
+      <p class="line2">슬슬 급해 보입니다.</p>
+    </div>
+
+    <div class="home-card-list" id="homeList"></div>
+
+    <div class="home-empty" id="homeEmpty" style="display:none;">
+      <span class="emoji-big">🟢</span>
+      곧 소비기한이 다가오는 제품이 없습니다.
+    </div>
+
+  </section>
+
+  <!-- ============================================================
+       화면 2) 등록 - 액션시트에서 방식을 고른 뒤에만 이 화면으로 진입
+       ============================================================ -->
+  <section class="screen" id="screen-register">
+
+    <!-- 2-1. 사진 업로드 카드 (촬영/앨범 모드에서만 표시) -->
+    <section class="card" id="uploadCard">
+      <h2>사진</h2>
+      <div class="upload-zone">
+        <label class="preview-box" id="previewBox" for="albumInput">
+          사진을 선택하면<br />여기에 미리보기가 표시됩니다
+        </label>
+        <!-- 카메라 촬영용 (capture 속성으로 후면 카메라 우선 실행) -->
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" />
+        <!-- 앨범에서 선택용 -->
+        <input type="file" id="albumInput" accept="image/*" />
+      </div>
+    </section>
+
+    <!-- 2-2. AI 분석 버튼 (촬영/앨범 모드에서만 표시) -->
+    <section class="card" id="analyzeCard">
+      <button class="btn btn-primary" id="analyzeBtn" type="button" disabled>
+        AI 분석
+      </button>
+      <p class="status" id="statusText"></p>
+    </section>
+
+    <!-- 2-3. 결과 카드 (분석 후 / 직접입력 / 수정 시 노출) -->
+    <section class="card" id="resultCard" style="display:none;">
+      <h2 id="resultCardTitle">제품 정보 (직접 수정 가능)</h2>
+
+      <div class="result-field">
+        <label for="brandInput">브랜드</label>
+        <input type="text" id="brandInput" placeholder="예: 에스트라" />
+      </div>
+
+      <div class="result-field">
+        <label for="productInput">제품명</label>
+        <input type="text" id="productInput" placeholder="예: 아토베리어365 크림" />
+      </div>
+
+      <div class="result-field">
+        <label for="categoryInput">카테고리</label>
+        <input type="text" id="categoryInput" placeholder="예: 크림" />
+      </div>
+
+      <div class="result-field">
+        <label for="expiryInput">소비기한</label>
+        <input
+          type="text"
+          id="expiryInput"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          maxlength="10"
+          placeholder="숫자 8자리 입력 예: 20280115"
+        />
+      </div>
+
+      <button class="btn btn-primary save-btn" id="saveBtn" type="button">
+        저장하기
+      </button>
+      <p class="status" id="saveStatusText"></p>
+    </section>
+
+  </section>
+
+  <!-- ============================================================
+       화면 3) 목록 - 카테고리 필터 + 전체 제품, 소비기한이 가까운 순
+       ============================================================ -->
+  <section class="screen" id="screen-list">
+    <div class="category-filter" id="categoryFilter"></div>
+    <p class="list-sort-note">소비기한이 가까운 순으로 정렬됩니다</p>
+    <section class="card" style="padding: 6px 16px;">
+      <div id="listContainer"></div>
+      <div class="list-empty" id="listEmpty" style="display:none;">
+        아직 등록된 제품이 없습니다.
+      </div>
+    </section>
+  </section>
+
+  <!-- ============================================================
+       화면 4) 설정 - Gemini API Key 확인 / 변경 / 삭제
+       ============================================================ -->
+  <section class="screen" id="screen-settings">
+    <h2 class="settings-section-title">AI 사진 인식 (Gemini API Key)</h2>
+    <section class="card" id="settingsApiKeyCard">
+      <!-- JS(renderSettings)가 저장 여부에 따라 아래 내용을 채워 넣습니다 -->
+    </section>
+    <p class="list-sort-note">
+      API Key는 이 기기의 브라우저(localStorage)에만 저장되며, 외부로 전송되지 않습니다.
+      Key가 없어도 앱의 다른 기능(등록/목록/수정/삭제/필터)은 그대로 사용할 수 있습니다.
+    </p>
+  </section>
+
+</div>
+
+<!-- ============================================================
+     하단 탭바 - 홈 / 등록 / 목록
+     ============================================================ -->
+<nav class="tabbar">
+  <div class="tabbar-inner">
+    <button type="button" class="tab-btn active" id="tabHomeBtn" data-screen="screen-home">
+      <span class="tab-icon">🏠</span>홈
+    </button>
+    <button type="button" class="tab-btn tab-add" id="tabRegisterBtn" data-screen="screen-register">
+      <span class="tab-icon">➕</span>등록
+    </button>
+    <button type="button" class="tab-btn" id="tabListBtn" data-screen="screen-list">
+      <span class="tab-icon">📋</span>목록
+    </button>
+  </div>
+</nav>
+
+<!-- ============================================================
+     등록 방식 선택 Action Sheet (하단 + 버튼을 누르면 표시)
+     ============================================================ -->
+<div class="sheet-backdrop" id="sheetBackdrop"></div>
+<div class="action-sheet" id="actionSheet">
+  <div class="action-sheet-group">
+    <button type="button" class="action-sheet-btn" id="sheetCameraBtn">사진 촬영</button>
+    <button type="button" class="action-sheet-btn" id="sheetAlbumBtn">앨범에서 선택</button>
+    <button type="button" class="action-sheet-btn" id="sheetManualBtn">직접 입력</button>
+    <button type="button" class="action-sheet-btn action-sheet-cancel" id="sheetCancelBtn">취소</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     API Key 필요 안내 모달 (사진 촬영/앨범 선택 시 Key가 없으면 표시)
+     ============================================================ -->
+<div class="modal-backdrop" id="keyRequiredBackdrop">
+  <div class="modal-card">
+    <h3>API Key가 필요해요</h3>
+    <p>AI 사진 인식 기능을 사용하려면
+Gemini API Key가 필요합니다.
+API Key는 내 기기에만 저장되며
+외부로 공유되지 않습니다.</p>
+    <div class="modal-btn-group">
+      <button type="button" class="btn btn-primary" id="keyRequiredEnterBtn">API Key 입력</button>
+      <button type="button" class="btn btn-secondary" id="keyRequiredManualBtn">직접 입력하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     API Key 입력 모달
+     ============================================================ -->
+<div class="modal-backdrop" id="keyInputBackdrop">
+  <div class="modal-card">
+    <h3>Gemini API Key</h3>
+    <label for="apiKeyInput">API Key</label>
+    <input type="text" id="apiKeyInput" placeholder="AIza..." autocomplete="off" />
+    <p class="status error" id="apiKeyInputStatus" style="text-align:left; margin: -4px 0 10px;"></p>
+    <button type="button" class="btn btn-primary" id="apiKeySaveBtn">저장</button>
+    <br />
+    <button type="button" class="modal-link" id="apiKeyFreeLinkBtn">
+      API Key가 없으신가요?<br />Google AI Studio에서 무료로 발급받기
+    </button>
+  </div>
+</div>
+
+<script>
+/* =============================================================
+   API Key 관리
+   ------------------------------------------------------------
+   - Gemini API Key는 더 이상 코드에 하드코딩하지 않고, 브라우저
+     localStorage에 "GEMINI_API_KEY"라는 이름으로 저장/관리합니다.
+   - Key가 없어도 앱 자체(홈/등록-직접입력/목록/수정/삭제/필터)는
+     정상적으로 사용할 수 있고, AI 사진 인식(촬영/앨범 선택) 기능만
+     Key가 필요합니다.
+   - 데모/테스트 목적으로 클라이언트에서 직접 Gemini API를 호출합니다.
+     실제 서비스에서는 절대 프론트엔드에 키를 노출하면 안 되며,
+     반드시 서버(백엔드)를 경유해서 호출해야 합니다.
+   ============================================================= */
+const API_KEY_STORAGE_KEY = "GEMINI_API_KEY";
+
+function getStoredApiKey() {
+  try {
+    return localStorage.getItem(API_KEY_STORAGE_KEY) || "";
+  } catch (e) {
+    console.error("[localStorage] API Key를 불러오지 못했습니다:", e);
+    return "";
+  }
+}
+
+function setStoredApiKey(key) {
+  try {
+    localStorage.setItem(API_KEY_STORAGE_KEY, key);
+  } catch (e) {
+    console.error("[localStorage] API Key를 저장하지 못했습니다:", e);
+  }
+}
+
+function removeStoredApiKey() {
+  try {
+    localStorage.removeItem(API_KEY_STORAGE_KEY);
+  } catch (e) {
+    console.error("[localStorage] API Key를 삭제하지 못했습니다:", e);
+  }
+}
+
+// Vision(이미지 인식)을 지원하는 최신 권장 모델
+const GEMINI_MODEL = "gemini-2.5-flash";
+
+// ---------------------------------------------------------------
+// DOM 요소 참조 (기존 분석 관련 요소는 id를 그대로 유지)
+// ---------------------------------------------------------------
+const cameraInput = document.getElementById("cameraInput");
+const albumInput = document.getElementById("albumInput");
+const previewBox = document.getElementById("previewBox");
+const analyzeBtn = document.getElementById("analyzeBtn");
+const statusText = document.getElementById("statusText");
+const resultCard = document.getElementById("resultCard");
+const brandInput = document.getElementById("brandInput");
+const productInput = document.getElementById("productInput");
+const categoryInput = document.getElementById("categoryInput");
+const expiryInput = document.getElementById("expiryInput");
+const saveBtn = document.getElementById("saveBtn");
+const saveStatusText = document.getElementById("saveStatusText");
+
+const uploadCard = document.getElementById("uploadCard");
+const analyzeCard = document.getElementById("analyzeCard");
+const resultCardTitle = document.getElementById("resultCardTitle");
+
+const tabRegisterBtn = document.getElementById("tabRegisterBtn");
+const sheetBackdrop = document.getElementById("sheetBackdrop");
+const actionSheet = document.getElementById("actionSheet");
+const sheetCameraBtn = document.getElementById("sheetCameraBtn");
+const sheetAlbumBtn = document.getElementById("sheetAlbumBtn");
+const sheetManualBtn = document.getElementById("sheetManualBtn");
+const sheetCancelBtn = document.getElementById("sheetCancelBtn");
+
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsApiKeyCard = document.getElementById("settingsApiKeyCard");
+
+const keyRequiredBackdrop = document.getElementById("keyRequiredBackdrop");
+const keyRequiredEnterBtn = document.getElementById("keyRequiredEnterBtn");
+const keyRequiredManualBtn = document.getElementById("keyRequiredManualBtn");
+
+const keyInputBackdrop = document.getElementById("keyInputBackdrop");
+const apiKeyInput = document.getElementById("apiKeyInput");
+const apiKeyInputStatus = document.getElementById("apiKeyInputStatus");
+const apiKeySaveBtn = document.getElementById("apiKeySaveBtn");
+const apiKeyFreeLinkBtn = document.getElementById("apiKeyFreeLinkBtn");
+
+let selectedBase64 = null;      // 업로드한 이미지의 base64 데이터 (data URL 포함)
+let selectedMimeType = null;    // 이미지 MIME 타입 (image/png, image/jpeg 등)
+let currentSourceMode = "camera"; // "camera" | "album" | "manual"
+let editingProductId = null;    // null이면 신규 등록, 값이 있으면 해당 id의 제품을 수정 중
+let pendingAiMode = null;       // API Key 입력 후 자동으로 이어서 진행할 모드("camera"|"album")
+
+// 앱 실행 시에는 API Key 관련 안내를 별도로 띄우지 않고 바로 홈 화면으로 진입합니다.
+// (Key가 없어도 앱은 정상 사용 가능 - AI 사진 인식 기능만 사용 시점에 확인합니다)
+
+/* =========================================================================
+   1. 하단 탭바 / 화면 전환
+   ========================================================================= */
+const screens = {
+  "screen-home": document.getElementById("screen-home"),
+  "screen-register": document.getElementById("screen-register"),
+  "screen-list": document.getElementById("screen-list"),
+  "screen-settings": document.getElementById("screen-settings"),
+};
+const tabButtons = document.querySelectorAll(".tab-btn");
+
+function showScreen(screenId) {
+  Object.values(screens).forEach((el) => el.classList.remove("active"));
+  screens[screenId].classList.add("active");
+
+  tabButtons.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.screen === screenId);
+  });
+
+  if (screenId === "screen-home") renderHome();
+  if (screenId === "screen-list") renderList();
+  if (screenId === "screen-settings") renderSettings();
+}
+
+// ⚙️ 설정 화면 진입 (하단 탭바와 별개로 헤더의 톱니바퀴 버튼으로 이동)
+settingsBtn.addEventListener("click", () => showScreen("screen-settings"));
+
+tabButtons.forEach((btn) => {
+  // 등록 탭은 화면으로 바로 이동하지 않고, 먼저 Action Sheet를 띄운다
+  if (btn === tabRegisterBtn) return;
+  btn.addEventListener("click", () => showScreen(btn.dataset.screen));
+});
+
+/* =========================================================================
+   1-1. 등록 방식 선택 Action Sheet
+   ------------------------------------------------------------------------
+   하단 + 버튼을 누르면 화면을 바로 옮기지 않고, iOS Action Sheet처럼
+   "사진 촬영 / 앨범에서 선택 / 직접 입력 / 취소"를 먼저 보여준다.
+   여기서 하나를 고른 뒤에야 등록 화면으로 이동한다.
+   ========================================================================= */
+function openActionSheet() {
+  sheetBackdrop.classList.add("open");
+  actionSheet.classList.add("open");
+}
+
+function closeActionSheet() {
+  sheetBackdrop.classList.remove("open");
+  actionSheet.classList.remove("open");
+}
+
+tabRegisterBtn.addEventListener("click", openActionSheet);
+sheetBackdrop.addEventListener("click", closeActionSheet);
+sheetCancelBtn.addEventListener("click", closeActionSheet);
+
+// Action Sheet에서 방식을 선택했을 때: 신규 등록 상태로 초기화 후 등록 화면으로 이동
+function beginRegister(mode) {
+  editingProductId = null;
+  if (resultCardTitle) resultCardTitle.textContent = "제품 정보 (직접 수정 가능)";
+  saveBtn.textContent = "저장하기";
+
+  setSourceMode(mode);
+  showScreen("screen-register");
+
+  if (mode === "camera") cameraInput.click();
+  else if (mode === "album") albumInput.click();
+}
+
+sheetCameraBtn.addEventListener("click", () => {
+  closeActionSheet();
+  requestRegisterWithAiCheck("camera");
+});
+sheetAlbumBtn.addEventListener("click", () => {
+  closeActionSheet();
+  requestRegisterWithAiCheck("album");
+});
+sheetManualBtn.addEventListener("click", () => {
+  closeActionSheet();
+  beginRegister("manual"); // 직접 입력은 AI를 쓰지 않으므로 API Key 확인 없이 바로 진행
+});
+
+/* =========================================================================
+   1-2. AI 사진 인식(촬영/앨범 선택) 진입 전 API Key 확인
+   ------------------------------------------------------------------------
+   "사진 촬영" 또는 "앨범에서 선택"을 눌렀을 때만 API Key 존재 여부를 확인한다.
+   Key가 있으면 기존과 동일하게 바로 등록 화면 + 카메라/앨범을 연다.
+   Key가 없으면 카메라/앨범을 열지 않고 안내 모달을 먼저 보여준다.
+   ========================================================================= */
+function requestRegisterWithAiCheck(mode) {
+  if (getStoredApiKey()) {
+    beginRegister(mode);
+  } else {
+    pendingAiMode = mode;
+    openKeyRequiredModal();
+  }
+}
+
+function openKeyRequiredModal() {
+  keyRequiredBackdrop.classList.add("open");
+}
+function closeKeyRequiredModal() {
+  keyRequiredBackdrop.classList.remove("open");
+}
+
+// 배경(반투명 영역) 클릭 시 닫기
+keyRequiredBackdrop.addEventListener("click", (e) => {
+  if (e.target === keyRequiredBackdrop) closeKeyRequiredModal();
+});
+
+// "직접 입력하기" -> AI 등록 시도를 취소하고 직접 입력 화면으로 이동
+keyRequiredManualBtn.addEventListener("click", () => {
+  closeKeyRequiredModal();
+  pendingAiMode = null;
+  beginRegister("manual");
+});
+
+// "API Key 입력" -> Key 입력 모달을 이어서 띄운다
+keyRequiredEnterBtn.addEventListener("click", () => {
+  closeKeyRequiredModal();
+  openKeyInputModal();
+});
+
+/* =========================================================================
+   1-3. API Key 입력 모달
+   ========================================================================= */
+function openKeyInputModal() {
+  apiKeyInput.value = "";
+  apiKeyInputStatus.textContent = "";
+  keyInputBackdrop.classList.add("open");
+}
+function closeKeyInputModal() {
+  keyInputBackdrop.classList.remove("open");
+}
+
+keyInputBackdrop.addEventListener("click", (e) => {
+  if (e.target === keyInputBackdrop) closeKeyInputModal();
+});
+
+// "무료로 발급받기" -> Google AI Studio를 새 탭으로 열기
+apiKeyFreeLinkBtn.addEventListener("click", () => {
+  window.open("https://aistudio.google.com/apikey", "_blank", "noopener");
+});
+
+// "저장" -> localStorage에 저장하고, 하려던 AI 등록이 있었다면 자동으로 이어서 진행
+apiKeySaveBtn.addEventListener("click", () => {
+  const key = apiKeyInput.value.trim();
+  if (!key) {
+    apiKeyInputStatus.textContent = "API Key를 입력해주세요.";
+    return;
+  }
+
+  setStoredApiKey(key);
+  closeKeyInputModal();
+
+  if (pendingAiMode) {
+    const mode = pendingAiMode;
+    pendingAiMode = null;
+    beginRegister(mode); // 방금 시도했던 사진 AI 등록을 자동으로 이어서 진행
+  }
+
+  // 설정 화면이 열려 있었을 수도 있으니 최신 상태로 다시 그린다
+  renderSettings();
+});
+
+/* =========================================================================
+   1-4. 설정 화면 - 저장된 API Key 확인 / 변경 / 삭제
+   ========================================================================= */
+function maskApiKey(key) {
+  return key.slice(0, 6) + "******";
+}
+
+function renderSettings() {
+  const key = getStoredApiKey();
+
+  if (key) {
+    settingsApiKeyCard.innerHTML = `
+      <div class="settings-row">
+        <span class="settings-label">저장된 API Key</span>
+        <span class="settings-value">${escapeHtml(maskApiKey(key))}</span>
+      </div>
+      <div class="settings-btn-row">
+        <button type="button" class="btn btn-secondary" id="settingsChangeKeyBtn">변경</button>
+        <button type="button" class="btn btn-secondary" id="settingsDeleteKeyBtn">삭제</button>
+      </div>
+    `;
+    document.getElementById("settingsChangeKeyBtn").addEventListener("click", () => {
+      openKeyInputModal();
+    });
+    document.getElementById("settingsDeleteKeyBtn").addEventListener("click", () => {
+      removeStoredApiKey();
+      renderSettings();
+    });
+  } else {
+    settingsApiKeyCard.innerHTML = `
+      <p class="status" style="margin: 0 0 14px;">
+        저장된 API Key가 없습니다. AI 사진 인식 기능을 사용하려면 API Key를 입력해주세요.
+      </p>
+      <button type="button" class="btn btn-primary" id="settingsAddKeyBtn">API Key 입력</button>
+    `;
+    document.getElementById("settingsAddKeyBtn").addEventListener("click", () => {
+      openKeyInputModal();
+    });
+  }
+}
+
+/* =========================================================================
+   2. 등록 화면 - 사진 소스에 따라 카드 표시/숨김 (촬영 / 앨범 / 직접입력)
+   ========================================================================= */
+function setSourceMode(mode) {
+  currentSourceMode = mode;
+
+  // 상태 초기화
+  selectedBase64 = null;
+  selectedMimeType = null;
+  statusText.textContent = "";
+  statusText.classList.remove("error");
+  resultCard.style.display = "none";
+  previewBox.innerHTML = "사진을 선택하면<br />여기에 미리보기가 표시됩니다";
+  analyzeBtn.disabled = true;
+
+  if (mode === "camera") {
+    uploadCard.style.display = "block";
+    analyzeCard.style.display = "block";
+    previewBox.setAttribute("for", "cameraInput");
+  } else if (mode === "album") {
+    uploadCard.style.display = "block";
+    analyzeCard.style.display = "block";
+    previewBox.setAttribute("for", "albumInput");
+  } else {
+    // 직접 입력: 사진/AI 분석 없이 바로 입력 폼을 보여준다
+    uploadCard.style.display = "none";
+    analyzeCard.style.display = "none";
+    resultCard.style.display = "block";
+    setFieldValue(brandInput, null);
+    setFieldValue(productInput, null);
+    setFieldValue(categoryInput, null);
+    expiryInput.value = "";
+  }
+}
+
+// 미리보기 박스를 누르면 현재 모드에 맞는 입력이 열리도록 함
+previewBox.addEventListener("click", (e) => {
+  e.preventDefault();
+  if (currentSourceMode === "camera") cameraInput.click();
+  else if (currentSourceMode === "album") albumInput.click();
+});
+
+// ---------------------------------------------------------------
+// 파일 선택 시: 미리보기 렌더링 + base64로 변환해 저장
+// (카메라/앨범 입력 모두 동일한 로직을 공유)
+// ---------------------------------------------------------------
+function handleFileSelected(file) {
+  if (!file) return;
+
+  selectedMimeType = file.type || "image/jpeg";
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    selectedBase64 = e.target.result; // data:image/xxx;base64,...... 형태
+
+    // 미리보기 이미지 표시
+    previewBox.innerHTML = "";
+    const img = document.createElement("img");
+    img.src = selectedBase64;
+    previewBox.appendChild(img);
+
+    // 분석 버튼 활성화 + 이전 결과 초기화
+    analyzeBtn.disabled = false;
+    statusText.textContent = "";
+    statusText.classList.remove("error");
+    resultCard.style.display = "none";
+  };
+  reader.readAsDataURL(file);
+}
+
+cameraInput.addEventListener("change", () => handleFileSelected(cameraInput.files[0]));
+albumInput.addEventListener("change", () => handleFileSelected(albumInput.files[0]));
+
+/* =========================================================================
+   2-1. 소비기한 숫자 입력 자동 포맷 (YYYYMMDD 입력 -> YYYY-MM-DD로 자동 변환)
+   ------------------------------------------------------------------------
+   숫자가 아닌 문자는 입력 즉시 제거하고, 8자리가 모두 채워지면
+   대시(-)를 자동으로 넣어 "YYYY-MM-DD" 형태로 만들어준다.
+   ========================================================================= */
+expiryInput.addEventListener("input", () => {
+  const digits = expiryInput.value.replace(/\D/g, "").slice(0, 8);
+  expiryInput.value =
+    digits.length === 8
+      ? `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
+      : digits;
+});
+
+/* =========================================================================
+   3. "AI 분석" 버튼 클릭 -> Gemini Vision API 호출 (로직 변경 없음)
+   ========================================================================= */
+analyzeBtn.addEventListener("click", async () => {
+  if (!selectedBase64) return;
+
+  if (!getStoredApiKey()) {
+    statusText.textContent = "API Key를 먼저 설정해주세요.";
+    statusText.classList.add("error");
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const result = await analyzeImageWithGemini(selectedBase64);
+    fillResultCard(result);
+    statusText.textContent = "분석이 완료되었습니다.";
+    statusText.classList.remove("error");
+  } catch (err) {
+    console.error(err);
+    statusText.textContent = "분석 중 오류가 발생했습니다: " + err.message;
+    statusText.classList.add("error");
+  } finally {
+    setLoading(false);
+  }
+});
+
+function setLoading(isLoading) {
+  analyzeBtn.disabled = isLoading;
+  if (isLoading) {
+    statusText.innerHTML = '<span class="spinner"></span>AI가 사진을 분석하고 있습니다...';
+    statusText.classList.remove("error");
+  }
+}
+
+/**
+ * Gemini 응답 텍스트에서 순수 JSON 문자열만 추출하는 헬퍼 함수
+ * ------------------------------------------------------------
+ * 처리하는 케이스:
+ * 1) ```json { ... } ``` 처럼 코드블록으로 감싸서 오는 경우
+ *    -> ``` 코드펜스를 제거
+ * 2) "다음은 분석 결과입니다: { ... }" 처럼 설명 문장이 앞뒤에
+ *    붙어서 오는 경우
+ *    -> 문자열에서 첫 '{' 부터 마지막 '}' 까지만 잘라서 사용
+ */
+function extractJsonString(rawText) {
+  let text = rawText.trim();
+
+  // 1) ```json ... ``` 또는 ``` ... ``` 코드펜스 제거
+  const codeFenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeFenceMatch) {
+    text = codeFenceMatch[1].trim();
+  }
+
+  // 2) 앞뒤에 설명 문장이 섞여 있는 경우, 첫 '{' ~ 마지막 '}' 구간만 추출
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    text = text.slice(firstBrace, lastBrace + 1);
+  }
+
+  return text.trim();
+}
+
+/**
+ * ============================================================
+ * Google Gemini API 호출 함수 (모델명은 GEMINI_MODEL 상수를 사용)
+ * ------------------------------------------------------------
+ * - 엔드포인트: POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
+ *   (Interactions API는 아직 베타 단계이므로, Google 공식 문서가 안정적인
+ *    프로덕션 배포용으로 계속 권장하는 generateContent REST 엔드포인트를 사용합니다.)
+ * - 인증 방식: "x-goog-api-key" 요청 헤더로 API Key 전달
+ *   (Google API 레퍼런스 문서의 최신 curl 예제 방식을 따릅니다.)
+ * - 이미지는 base64 "순수 데이터"만 inline_data.data에 담아 전송합니다.
+ *   (data:image/jpeg;base64, 같은 접두어는 제거하고 순수 base64 문자열만 사용)
+ * - generationConfig.responseMimeType을 "application/json"으로 지정해서
+ *   모델이 항상 JSON 형태로만 응답하도록 강제합니다.
+ * - 프롬프트에서 "확실하지 않으면 null" 규칙을 명시해 추측성 답변을
+ *   방지합니다.
+ * ============================================================
+ */
+async function analyzeImageWithGemini(base64ImageDataUrl) {
+  // 모델에게 역할과 출력 규칙을 명확히 지시하는 프롬프트
+  const promptText =
+    "당신은 화장품 패키지 사진을 보고 브랜드, 제품명, 카테고리를 " +
+    "추출하는 전문 분석기입니다. 반드시 아래 JSON 형식으로만 응답하세요. " +
+    "다른 설명, 문장, 마크다운은 절대 포함하지 마세요.\n" +
+    '{"brand": "", "product": "", "category": ""}\n' +
+    "규칙:\n" +
+    "1. 사진에서 명확하게 읽거나 확인할 수 있는 정보만 채우세요.\n" +
+    "2. 추측하지 마세요. 확실하지 않으면 반드시 null을 반환하세요.\n" +
+    "3. category는 '크림', '토너', '세럼', '선크림', '클렌저' 등 " +
+    "화장품의 제품 유형을 나타내는 짧은 한글 단어로 작성하세요.\n" +
+    "4. 이 화장품 사진을 분석해서 위 JSON 형식으로만 답해주세요.";
+
+  // data URL(data:image/jpeg;base64,xxxx...)에서
+  // 순수 base64 데이터 부분만 분리
+  const base64Data = base64ImageDataUrl.split(",")[1];
+
+  // 요청 본문 구성 (generateContent 스펙)
+  const requestBody = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: promptText },
+          {
+            // Vision 입력은 inline_data로 base64 이미지를 직접 전달
+            inline_data: {
+              mime_type: selectedMimeType || "image/jpeg",
+              data: base64Data,
+            },
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      // 모델 출력이 항상 유효한 JSON 객체가 되도록 강제
+      responseMimeType: "application/json",
+      temperature: 0, // 추측/창작을 줄이고 일관된 답변을 얻기 위해 0으로 설정
+      maxOutputTokens: 800, // 응답이 도중에 잘려 JSON이 깨지는 것을 방지하기 위해 넉넉하게 설정
+    },
+  };
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+  // 디버깅용: 실제 요청을 보내기 직전에 엔드포인트와 요청 바디를 콘솔에 출력
+  console.log("[Gemini endpoint]", endpoint);
+  console.log("[Gemini requestBody]", requestBody);
+
+  // ---------------------------------------------------------------
+  // 서버 과부하(500 "currently experiencing high demand") 대응 재시도 로직
+  // ------------------------------------------------------------------------
+  // 500(high demand) 발생 시 20초 대기 후 딱 한 번만 재시도한다.
+  // 429(요청 과다)는 재시도하지 않고 바로 안내 메시지를 표시한다.
+  // ---------------------------------------------------------------
+  const RETRY_DELAY_MS = 20000; // 20초
+  const MAX_RETRIES = 1; // 최초 시도 1회 + 재시도 1회 = 최대 2번 요청
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  let response;
+  let errText = "";
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // API Key를 쿼리 파라미터가 아닌 헤더로 전달합니다.
+        "x-goog-api-key": getStoredApiKey(),
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (response.ok) break;
+
+    errText = await response.text();
+    // 디버깅용: 요청이 실패했을 때 상태 코드와 원문 응답을 콘솔에 출력
+    console.error("[Gemini response status]", response.status);
+    console.error("[Gemini response raw text]", errText);
+
+    // 429(요청 과다)는 재시도하지 않고 바로 안내 메시지로 종료
+    if (response.status === 429) {
+      throw new Error("현재 AI 서버 이용량이 많습니다. 잠시 후 다시 시도해주세요.");
+    }
+
+    const isHighDemand500 = response.status === 500 && /high demand/i.test(errText);
+    const hasRetriesLeft = attempt < MAX_RETRIES;
+
+    if (isHighDemand500 && hasRetriesLeft) {
+      console.warn(
+        `[Gemini] 서버 과부하(500)로 응답이 실패했습니다. 20초 후 한 번만 재시도합니다.`
+      );
+      await sleep(RETRY_DELAY_MS);
+      continue;
+    }
+
+    // 재시도 대상이 아니거나(500 "high demand"가 아니거나) 재시도를 이미 소진한 경우
+    throw new Error(`Gemini API 요청 실패 (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json();
+
+  // 디버깅용: Gemini가 반환한 raw response 전체를 콘솔에 출력
+  console.log("[Gemini raw response]", data);
+
+  // 모델의 실제 응답 텍스트 (JSON 문자열) 추출
+  // 구조: data.candidates[0].content.parts[0].text
+  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!content) {
+    console.error("[Gemini] 텍스트를 찾지 못함. raw response:", data);
+    throw new Error("응답에서 결과 텍스트를 찾을 수 없습니다.");
+  }
+
+  // 디버깅용: 파싱 전 원문 텍스트 출력
+  console.log("[Gemini raw text]", content);
+
+  // JSON 파싱 전처리
+  // - responseMimeType을 지정해도 모델이 가끔 ```json ... ``` 코드블록이나
+  //   설명 문장을 함께 붙여 보내는 경우가 있어 방어적으로 정리한다.
+  const cleanedText = extractJsonString(content);
+
+  let parsed;
+  try {
+    parsed = JSON.parse(cleanedText);
+  } catch (e) {
+    // 파싱 실패 시 원문/정제본을 모두 콘솔에 남겨 원인 파악이 쉽도록 함
+    console.error("[Gemini] JSON.parse 실패. 정제된 텍스트:", cleanedText);
+    console.error("[Gemini] JSON.parse 실패. 원문 텍스트:", content);
+
+    // 화면(기존 statusText 영역)에도 원문 응답 일부를 보여줘서
+    // 어떤 응답 때문에 실패했는지 바로 확인할 수 있도록 함
+    const snippet = content.slice(0, 120).replace(/\s+/g, " ").trim();
+    throw new Error(
+      `모델 응답을 JSON으로 해석할 수 없습니다. (원문 일부: "${snippet}${content.length > 120 ? "..." : ""}")`
+    );
+  }
+
+  return {
+    brand: parsed.brand ?? null,
+    product: parsed.product ?? null,
+    category: parsed.category ?? null,
+  };
+}
+
+// ---------------------------------------------------------------
+// 결과를 카드(입력창)에 채워 넣기.
+// null인 경우 입력창을 비워두고 placeholder에 "확인 필요" 표시 + 빨간 강조
+// ---------------------------------------------------------------
+function fillResultCard(result) {
+  resultCard.style.display = "block";
+  setFieldValue(brandInput, result.brand);
+  setFieldValue(productInput, result.product);
+  setFieldValue(categoryInput, result.category);
+  expiryInput.value = "";
+}
+
+function setFieldValue(inputEl, value) {
+  if (value === null || value === undefined || value === "") {
+    inputEl.value = "";
+    inputEl.placeholder = "AI가 확인하지 못했습니다 (직접 입력)";
+    inputEl.classList.add("is-null");
+  } else {
+    inputEl.value = value;
+    inputEl.classList.remove("is-null");
+  }
+}
+
+/* =========================================================================
+   4. 제품 저장 (localStorage 사용 - Firebase/로그인 없이 새로고침 후에도 유지)
+   ========================================================================= */
+// products: { id, imageDataUrl, brand, product, category, expiryDate(YYYY-MM-DD), createdAt }
+const STORAGE_KEY = "coshelf_products";
+
+// localStorage에서 저장된 제품 목록을 불러온다. 저장된 값이 없거나
+// 형식이 깨져 있으면 빈 배열로 시작한다.
+function loadProductsFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.error("[localStorage] 제품 목록을 불러오지 못했습니다:", e);
+    return [];
+  }
+}
+
+// 현재 products 배열을 localStorage에 그대로 저장한다.
+function saveProductsToStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+  } catch (e) {
+    console.error("[localStorage] 제품 목록을 저장하지 못했습니다:", e);
+  }
+}
+
+// 앱 시작 시 기존 저장된 제품을 불러와 초기 상태로 사용
+let products = loadProductsFromStorage();
+
+// ---------------------------------------------------------------
+// 소비기한 날짜 검증 (Validation)
+// ------------------------------------------------------------------------
+// "YYYY-MM-DD" 형식이더라도 2/30, 4/31, 13월처럼 실제로 존재하지 않는
+// 날짜는 걸러낸다. new Date(year, month-1, day)로 만든 뒤, 브라우저가
+// 자동으로 다음 달로 넘겨버린(정규화한) 날짜는 원래 입력값과 연/월/일이
+// 달라지므로 이를 비교해 유효성을 판단한다. 이 방식은 매년 2월 일수가
+// 다른 윤년(29일)/평년(28일) 여부도 별도 로직 없이 정확하게 처리된다.
+// ---------------------------------------------------------------
+function isValidCalendarDate(dateStr) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+
+  const date = new Date(year, month - 1, day);
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+
+saveBtn.addEventListener("click", () => {
+  const productName = productInput.value.trim();
+  const expiryDate = expiryInput.value;
+
+  if (!productName) {
+    saveStatusText.textContent = "제품명을 입력해주세요.";
+    saveStatusText.classList.add("error");
+    return;
+  }
+  // 소비기한은 숫자 8자리(YYYYMMDD)를 모두 입력해야 YYYY-MM-DD로 자동 변환된다
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expiryDate)) {
+    saveStatusText.textContent = "소비기한 8자리 숫자를 모두 입력해주세요. (예: 20280115)";
+    saveStatusText.classList.add("error");
+    return;
+  }
+  // 형식은 맞아도 2/30, 4/31, 13월 등 실제로 존재하지 않는 날짜는 저장을 막는다
+  if (!isValidCalendarDate(expiryDate)) {
+    saveStatusText.textContent = "올바른 소비기한을 입력해주세요.";
+    saveStatusText.classList.add("error");
+    return;
+  }
+
+  const isEditing = editingProductId !== null;
+
+  if (isEditing) {
+    // 기존 제품 수정: 새 항목을 추가하지 않고 해당 id의 데이터만 갱신
+    const target = products.find((p) => p.id === editingProductId);
+    if (target) {
+      target.brand = brandInput.value.trim();
+      target.product = productName;
+      target.category = categoryInput.value.trim();
+      target.expiryDate = expiryDate;
+      target.imageDataUrl = selectedBase64; // 사진을 새로 고르지 않았다면 기존 값 그대로 유지됨
+    }
+  } else {
+    // 신규 제품 등록
+    products.push({
+      id: Date.now(),
+      brand: brandInput.value.trim(),
+      product: productName,
+      category: categoryInput.value.trim(),
+      expiryDate: expiryDate,
+      imageDataUrl: selectedBase64, // 직접입력 모드에서는 null일 수 있음
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  // localStorage에 즉시 반영
+  saveProductsToStorage();
+
+  // 홈/목록 화면도 바로 최신 상태로 다시 그린다
+  renderHome();
+  renderList();
+
+  saveStatusText.textContent = isEditing ? "수정되었습니다." : "저장되었습니다.";
+  saveStatusText.classList.remove("error");
+  saveStatusText.classList.add("success");
+
+  // 등록 폼 초기화 후 목록 화면으로 이동
+  setTimeout(() => {
+    saveStatusText.textContent = "";
+    saveStatusText.classList.remove("success");
+    editingProductId = null;
+    saveBtn.textContent = "저장하기";
+    if (resultCardTitle) resultCardTitle.textContent = "제품 정보 (직접 수정 가능)";
+    setSourceMode(currentSourceMode === "manual" ? "manual" : "camera");
+    showScreen("screen-list");
+  }, 500);
+});
+
+// ---------------------------------------------------------------
+// 제품 수정: 목록에서 제품을 누르거나 ✏️ 버튼을 누르면 호출된다.
+// 등록 화면과 동일한 화면을 재사용하고, 기존 값을 미리 채워 넣는다.
+// ---------------------------------------------------------------
+function openEditProduct(id) {
+  const p = products.find((x) => x.id === id);
+  if (!p) return;
+
+  editingProductId = id;
+
+  // 사진/AI 분석 카드와 결과 입력 폼을 함께 보여준다 (사진 교체는 선택 사항)
+  uploadCard.style.display = "block";
+  analyzeCard.style.display = "block";
+  resultCard.style.display = "block";
+  currentSourceMode = "album";
+  previewBox.setAttribute("for", "albumInput");
+
+  selectedBase64 = p.imageDataUrl || null;
+  selectedMimeType = null;
+
+  if (p.imageDataUrl) {
+    previewBox.innerHTML = `<img src="${p.imageDataUrl}" alt="${escapeHtml(p.product)}" />`;
+    analyzeBtn.disabled = false;
+  } else {
+    previewBox.innerHTML = "사진을 선택하면<br />여기에 미리보기가 표시됩니다";
+    analyzeBtn.disabled = true;
+  }
+
+  brandInput.value = p.brand || "";
+  brandInput.classList.remove("is-null");
+  productInput.value = p.product || "";
+  productInput.classList.remove("is-null");
+  categoryInput.value = p.category || "";
+  categoryInput.classList.remove("is-null");
+  expiryInput.value = p.expiryDate || "";
+
+  statusText.textContent = "";
+  statusText.classList.remove("error");
+  saveStatusText.textContent = "";
+  saveStatusText.classList.remove("error", "success");
+
+  if (resultCardTitle) resultCardTitle.textContent = "제품 정보 수정";
+  saveBtn.textContent = "수정 완료";
+
+  showScreen("screen-register");
+}
+
+// ---------------------------------------------------------------
+// 제품 삭제: products 배열과 localStorage에서 함께 제거 후
+// 홈/목록 화면을 즉시 다시 그린다.
+// ---------------------------------------------------------------
+function deleteProduct(id) {
+  products = products.filter((p) => p.id !== id);
+  saveProductsToStorage();
+  renderHome();
+  renderList();
+}
+
+/* =========================================================================
+   5. D-Day 계산 / 신호등 상태
+   ------------------------------------------------------------------------
+   상태 기준 (요청서에 명시된 "빨간 상태(D-7 이하)" 기준을 따르고,
+   노란색/초록색 경계는 화장품 소비기한 도메인에서 통상적으로 쓰이는
+   기준을 임의로 적용했습니다. 필요시 아래 두 숫자만 조정하면 됩니다.):
+     - ⚫ expired : 소비기한이 이미 지남 (D+1 이상, 죽은색/회색)
+     - 🔴 red     : D-DAY ~ D-7
+     - 🟡 yellow  : D-8 ~ D-30
+     - 🟢 green   : D-31 이상
+   ========================================================================= */
+const RED_THRESHOLD_DAYS = 7;
+const YELLOW_THRESHOLD_DAYS = 30;
+
+function computeDday(expiryStr) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiryDate = new Date(expiryStr + "T00:00:00");
+  const diffMs = expiryDate.getTime() - today.getTime();
+  const days = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  let status;
+  if (days < 0) status = "expired"; // 소비기한이 이미 지난 제품 -> 회색(죽은색)
+  else if (days <= RED_THRESHOLD_DAYS) status = "red";
+  else if (days <= YELLOW_THRESHOLD_DAYS) status = "yellow";
+  else status = "green";
+
+  let label;
+  if (days > 0) label = `D-${days}`;
+  else if (days === 0) label = "D-DAY";
+  else label = `D+${Math.abs(days)}`;
+
+  return { days, label, status };
+}
+
+function statusEmoji(status) {
+  if (status === "expired") return "⚫";
+  if (status === "red") return "🔴";
+  if (status === "yellow") return "🟡";
+  return "🟢";
+}
+
+/* =========================================================================
+   6. 홈 화면 렌더링 - 소비기한이 지난(회색) 제품과 임박한(빨간) 제품만 노출
+   ========================================================================= */
+const homeHero = document.getElementById("homeHero");
+const homeList = document.getElementById("homeList");
+const homeEmpty = document.getElementById("homeEmpty");
+
+function renderHome() {
+  const withDday = products.map((p) => ({ ...p, dday: computeDday(p.expiryDate) }));
+  // days 오름차순 정렬만으로 이미 "지난 제품(음수)"이 "임박한 제품(0~7)"보다
+  // 자연스럽게 앞에 오므로 회색 제품이 빨간 제품보다 위에 표시된다.
+  const urgentItems = withDday
+    .filter((p) => p.dday.status === "expired" || p.dday.status === "red")
+    .sort((a, b) => a.dday.days - b.dday.days);
+
+  if (urgentItems.length > 0) {
+    homeHero.className = "home-hero is-urgent";
+    homeHero.innerHTML = `
+      <p class="line1">이 친구,</p>
+      <p class="line2">슬슬 급해 보입니다.</p>
+    `;
+    homeList.style.display = "flex";
+    homeEmpty.style.display = "none";
+
+    homeList.innerHTML = urgentItems.map((p) => `
+      <div class="home-card">
+        <span class="status-dot">${statusEmoji(p.dday.status)}</span>
+        <div class="thumb">${
+          p.imageDataUrl
+            ? `<img src="${p.imageDataUrl}" alt="${escapeHtml(p.product)}" />`
+            : "🧴"
+        }</div>
+        <div class="info">
+          <div class="name">${escapeHtml(joinBrandProduct(p))}</div>
+          <div class="category">${escapeHtml(p.category || "카테고리 미상")}</div>
+        </div>
+        <span class="dday-pill ${p.dday.status}">${p.dday.label}</span>
+      </div>
+    `).join("");
+  } else {
+    homeHero.className = "home-hero is-safe";
+    homeHero.innerHTML = `
+      <p class="line1">오늘은</p>
+      <p class="line2">마음 놓으셔도 됩니다.</p>
+    `;
+    homeList.style.display = "none";
+    homeList.innerHTML = "";
+    homeEmpty.style.display = "block";
+  }
+}
+
+/* =========================================================================
+   7. 목록 화면 렌더링 - 카테고리 필터 + 전체 제품, 소비기한이 가까운 순 정렬
+   ========================================================================= */
+const listContainer = document.getElementById("listContainer");
+const listEmpty = document.getElementById("listEmpty");
+const categoryFilter = document.getElementById("categoryFilter");
+
+let currentCategoryFilter = "전체"; // "전체" 또는 products에 실제 존재하는 category 값
+
+function matchesCategoryFilter(p) {
+  if (currentCategoryFilter === "전체") return true;
+  return (p.category || "").trim() === currentCategoryFilter;
+}
+
+// products에 실제로 존재하는 category만 중복 없이, 가나다순으로 추출
+function getAvailableCategories() {
+  const categorySet = new Set();
+  products.forEach((p) => {
+    const category = (p.category || "").trim();
+    if (category) categorySet.add(category);
+  });
+  return Array.from(categorySet).sort((a, b) => a.localeCompare(b, "ko"));
+}
+
+// 카테고리 필터 칩을 products 기준으로 다시 그린다.
+// "전체"는 항상 맨 앞에 고정하고, 그 뒤에 실제 등록된 카테고리만 나열한다.
+// 제품이 모두 삭제되어 사라진 카테고리는 자동으로 칩 목록에서도 빠지고,
+// 그 카테고리가 현재 선택되어 있었다면 "전체"로 되돌린다.
+function renderCategoryFilter() {
+  const categories = getAvailableCategories();
+
+  if (currentCategoryFilter !== "전체" && !categories.includes(currentCategoryFilter)) {
+    currentCategoryFilter = "전체";
+  }
+
+  const chipHtml = (label) => `
+    <button type="button" class="category-chip${currentCategoryFilter === label ? " active" : ""}" data-category="${escapeHtml(label)}">${escapeHtml(label)}</button>
+  `;
+
+  categoryFilter.innerHTML = chipHtml("전체") + categories.map(chipHtml).join("");
+}
+
+function renderList() {
+  renderCategoryFilter();
+
+  const withDday = products
+    .map((p) => ({ ...p, dday: computeDday(p.expiryDate) }))
+    .filter(matchesCategoryFilter)
+    .sort((a, b) => a.dday.days - b.dday.days); // 소비기한이 가까운 순
+
+  if (withDday.length === 0) {
+    listContainer.innerHTML = "";
+    listEmpty.textContent =
+      products.length === 0
+        ? "아직 등록된 제품이 없습니다."
+        : "해당 카테고리의 제품이 없습니다.";
+    listEmpty.style.display = "block";
+    return;
+  }
+
+  listEmpty.style.display = "none";
+  listContainer.innerHTML = withDday.map((p) => `
+    <div class="list-row" data-id="${p.id}">
+      <span class="status-badge">${statusEmoji(p.dday.status)}</span>
+      <div class="thumb-wrap">
+        <div class="thumb">${
+          p.imageDataUrl
+            ? `<img src="${p.imageDataUrl}" alt="${escapeHtml(p.product)}" />`
+            : "🧴"
+        }</div>
+      </div>
+      <div class="info">
+        ${p.brand ? `<div class="brand">${escapeHtml(p.brand)}</div>` : ""}
+        <div class="product-name">${escapeHtml(p.product)}</div>
+      </div>
+      <span class="dday-pill ${p.dday.status}">${p.dday.label}</span>
+      <button type="button" class="edit-btn" data-id="${p.id}" aria-label="수정">✏️</button>
+      <button type="button" class="delete-btn" data-id="${p.id}" aria-label="삭제">✕</button>
+    </div>
+  `).join("");
+}
+
+// 카테고리 필터 칩 클릭 처리 (이벤트 위임 - 칩은 매번 새로 그려지므로
+// 컨테이너에 한 번만 리스너를 달아둔다)
+categoryFilter.addEventListener("click", (e) => {
+  const chip = e.target.closest(".category-chip");
+  if (!chip) return;
+  currentCategoryFilter = chip.dataset.category;
+  renderList();
+});
+
+// 목록의 수정/삭제 버튼 또는 행 자체 클릭을 이벤트 위임으로 처리
+listContainer.addEventListener("click", (e) => {
+  const deleteBtn = e.target.closest(".delete-btn");
+  if (deleteBtn) {
+    deleteProduct(Number(deleteBtn.dataset.id));
+    return;
+  }
+
+  const editBtn = e.target.closest(".edit-btn");
+  if (editBtn) {
+    openEditProduct(Number(editBtn.dataset.id));
+    return;
+  }
+
+  // 버튼이 아닌 행 영역을 눌렀을 때도 수정 화면으로 이동
+  const row = e.target.closest(".list-row");
+  if (row) {
+    openEditProduct(Number(row.dataset.id));
+  }
+});
+
+/* =========================================================================
+   8. 유틸
+   ========================================================================= */
+function joinBrandProduct(p) {
+  return [p.brand, p.product].filter(Boolean).join(" ") || "이름 미상 제품";
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/* =========================================================================
+   9. 초기화
+   ========================================================================= */
+setSourceMode("camera");
+renderHome();
+renderList();
+</script>
+</body>
+</html>
