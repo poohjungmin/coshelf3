@@ -187,6 +187,19 @@
     border: 1px solid var(--border);
   }
 
+  /* 삭제 확인 모달 전용 - 기존 primary/secondary 버튼은 그대로 두고 새 변형만 추가 */
+  .btn-danger {
+    background: var(--danger);
+    color: #ffffff;
+  }
+  .btn-danger:hover { background: #e0352b; }
+
+  .btn-neutral {
+    background: var(--surface);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+
   /* ---------------- 결과 카드 ---------------- */
   .result-field {
     margin-bottom: 14px;
@@ -472,6 +485,13 @@
     overflow: visible;
     word-break: keep-all;
     line-height: 1.4;
+  }
+
+  .list-row-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .edit-btn,
@@ -1087,6 +1107,20 @@ API Key는 내 기기에만 저장되며
   </div>
 </div>
 
+<!-- ============================================================
+     제품 삭제 확인 모달
+     ============================================================ -->
+<div class="modal-backdrop" id="deleteConfirmBackdrop">
+  <div class="modal-card">
+    <h3>이 제품을 삭제하시겠습니까?</h3>
+    <p>삭제한 데이터는 복구할 수 없습니다.</p>
+    <div class="modal-btn-group">
+      <button type="button" class="btn btn-danger" id="deleteConfirmBtn">삭제</button>
+      <button type="button" class="btn btn-neutral" id="deleteCancelBtn">취소</button>
+    </div>
+  </div>
+</div>
+
 
 <script>
 /* =============================================================
@@ -1184,6 +1218,10 @@ const restoreConfirmBackdrop = document.getElementById("restoreConfirmBackdrop")
 const restoreConfirmBtn = document.getElementById("restoreConfirmBtn");
 const restoreCancelBtn = document.getElementById("restoreCancelBtn");
 
+const deleteConfirmBackdrop = document.getElementById("deleteConfirmBackdrop");
+const deleteConfirmBtn = document.getElementById("deleteConfirmBtn");
+const deleteCancelBtn = document.getElementById("deleteCancelBtn");
+
 let selectedBase64 = null;      // 업로드한 이미지의 base64 데이터 (data URL 포함)
 let selectedMimeType = null;    // 이미지 MIME 타입 (image/png, image/jpeg 등)
 let currentSourceMode = "album"; // "album" | "manual"
@@ -1192,6 +1230,7 @@ let pendingAiMode = null;       // API Key 입력 후 자동으로 이어서 진
 let currentFavorite = false;    // 등록/수정 폼에서 현재 즐겨찾기 ON/OFF 상태
 let currentSearchQuery = "";    // 목록 화면 검색어 (소문자로 정규화되어 저장됨)
 let pendingRestoreProducts = null; // 복원 확인 대기 중인 백업 파일의 products 배열
+let pendingDeleteId = null;     // 삭제 확인 모달에서 "삭제"를 누르면 실제 삭제할 제품 id
 
 // 앱 실행 시에는 API Key 관련 안내를 별도로 띄우지 않고 바로 홈 화면으로 진입합니다.
 // (Key가 없어도 앱은 정상 사용 가능 - AI 사진 인식 기능만 사용 시점에 확인합니다)
@@ -2136,7 +2175,7 @@ function renderHome() {
         }</div>
         <div class="info">
           ${p.brand ? `<div class="brand">${escapeHtml(p.brand)}</div>` : ""}
-          <div class="product-name">${escapeHtml(p.product)}</div>
+          <div class="product-name">${productNameLabel(p)}</div>
         </div>
         <span class="dday-pill ${p.dday.status}">${p.dday.label}</span>
       </div>
@@ -2256,11 +2295,13 @@ function renderList() {
       </div>
       <div class="info">
         ${p.brand ? `<div class="brand">${escapeHtml(p.brand)}</div>` : ""}
-        <div class="product-name">${escapeHtml(p.product)}</div>
+        <div class="product-name">${productNameLabel(p)}</div>
       </div>
       <span class="dday-pill ${p.dday.status}">${p.dday.label}</span>
-      <button type="button" class="edit-btn" data-id="${p.id}" aria-label="수정">✏️</button>
-      <button type="button" class="delete-btn" data-id="${p.id}" aria-label="삭제">✕</button>
+      <div class="list-row-actions">
+        <button type="button" class="edit-btn" data-id="${p.id}" aria-label="수정">✏️</button>
+        <button type="button" class="delete-btn" data-id="${p.id}" aria-label="삭제">✕</button>
+      </div>
     </div>
   `).join("");
 }
@@ -2295,7 +2336,7 @@ searchClearBtn.addEventListener("click", () => {
 listContainer.addEventListener("click", (e) => {
   const deleteBtn = e.target.closest(".delete-btn");
   if (deleteBtn) {
-    deleteProduct(Number(deleteBtn.dataset.id));
+    openDeleteConfirmModal(Number(deleteBtn.dataset.id));
     return;
   }
 
@@ -2313,10 +2354,42 @@ listContainer.addEventListener("click", (e) => {
 });
 
 /* =========================================================================
+   7-2. 삭제 확인 모달 - 실수로 삭제하는 것을 방지
+   ========================================================================= */
+function openDeleteConfirmModal(id) {
+  pendingDeleteId = id;
+  deleteConfirmBackdrop.classList.add("open");
+}
+
+function closeDeleteConfirmModal() {
+  pendingDeleteId = null;
+  deleteConfirmBackdrop.classList.remove("open");
+}
+
+deleteConfirmBackdrop.addEventListener("click", (e) => {
+  if (e.target === deleteConfirmBackdrop) closeDeleteConfirmModal();
+});
+
+deleteCancelBtn.addEventListener("click", closeDeleteConfirmModal);
+
+// "삭제"를 눌렀을 때만 실제 삭제가 이루어진다
+deleteConfirmBtn.addEventListener("click", () => {
+  if (pendingDeleteId === null) return;
+  deleteProduct(pendingDeleteId);
+  closeDeleteConfirmModal();
+});
+
+/* =========================================================================
    8. 유틸
    ========================================================================= */
 function joinBrandProduct(p) {
   return [p.brand, p.product].filter(Boolean).join(" ") || "이름 미상 제품";
+}
+
+// 홈/목록 화면 공용: 제품명 맨 뒤에만 즐겨찾기 표시(⭐)를 붙인다 (브랜드명에는 붙이지 않음)
+function productNameLabel(p) {
+  const name = escapeHtml(p.product);
+  return p.favorite ? `${name} ⭐` : name;
 }
 
 function escapeHtml(str) {
