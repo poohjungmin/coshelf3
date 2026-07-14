@@ -1963,6 +1963,33 @@ favoriteToggleBtn.addEventListener("click", () => {
   updateFavoriteToggleUI();
 });
 
+// 휴대폰 원본 사진(보통 3~4000px, 수 MB)을 그대로 보내면 업로드/AI 처리 시간이
+// 길어지므로, 라벨을 읽는 데 충분한 해상도로 축소한 JPEG로 재인코딩한다.
+function resizeImageDataUrl(dataUrl, maxDimension) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDimension || height > maxDimension) {
+        if (width >= height) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => reject(new Error("이미지를 불러오지 못했습니다."));
+    img.src = dataUrl;
+  });
+}
+
 // ---------------------------------------------------------------
 // 파일 선택 시: 미리보기 렌더링 + base64로 변환해 저장
 // (카메라/앨범 입력 모두 동일한 로직을 공유)
@@ -1970,11 +1997,18 @@ favoriteToggleBtn.addEventListener("click", () => {
 function handleFileSelected(file) {
   if (!file) return;
 
-  selectedMimeType = file.type || "image/jpeg";
-
   const reader = new FileReader();
-  reader.onload = (e) => {
-    selectedBase64 = e.target.result; // data:image/xxx;base64,...... 형태
+  reader.onload = async (e) => {
+    const rawDataUrl = e.target.result; // data:image/xxx;base64,...... 형태
+
+    try {
+      selectedBase64 = await resizeImageDataUrl(rawDataUrl, 1280);
+      selectedMimeType = "image/jpeg";
+    } catch (err) {
+      console.error("[이미지] 축소 실패, 원본을 그대로 사용합니다:", err);
+      selectedBase64 = rawDataUrl;
+      selectedMimeType = file.type || "image/jpeg";
+    }
 
     // 미리보기 이미지 표시
     previewBox.innerHTML = "";
