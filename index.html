@@ -2706,5 +2706,54 @@ if ("serviceWorker" in navigator) {
   });
 }
 </script>
+
+<!-- ============================================================
+     Firebase (알림 기능용)
+     - Firestore는 기기(익명 인증 uid)별 알림 구독정보/설정/제품
+       유효기한 요약을 저장하는 용도로만 사용합니다.
+     - Anonymous Auth는 로그인 화면 없이 기기별 내부 식별자(uid)를
+       얻기 위한 용도이며, 사용자에게는 어떤 로그인 UI도 노출되지
+       않습니다.
+     - 실제 알림 발송은 GitHub Actions 스케줄 워크플로가 담당합니다.
+     ============================================================ -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+  import {
+    getAuth,
+    signInAnonymously,
+    onAuthStateChanged,
+  } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+  import { getFirestore } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAU4bWxq2xXlYWy1VZmU7N0m0QG3aPJvGI",
+    authDomain: "coshelf-fcc9f.firebaseapp.com",
+    projectId: "coshelf-fcc9f",
+    storageBucket: "coshelf-fcc9f.firebasestorage.app",
+    messagingSenderId: "1088889909159",
+    appId: "1:1088889909159:web:f215c29d5b816e85301082",
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  const uidReady = new Promise((resolve, reject) => {
+    onAuthStateChanged(auth, (user) => {
+      if (user) resolve(user.uid);
+    });
+    signInAnonymously(auth).catch((e) => {
+      console.error("[Firebase] 익명 로그인 실패:", e);
+      reject(e);
+    });
+  });
+
+  uidReady
+    .then((uid) => console.log("[Firebase] 익명 인증 uid 준비됨:", uid))
+    .catch(() => {});
+
+  // 알림 기능(다음 단계들)에서 사용할 수 있도록 전역에 노출
+  window.coshelfFirebase = { app, auth, db, uidReady };
+</script>
 </body>
 </html>

@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 기기(익명 인증 uid)당 문서 하나. 본인 uid와 일치하는 문서만 읽기/쓰기 가능.
+    match /devices/{deviceId} {
+      allow read, write: if request.auth != null && request.auth.uid == deviceId;
+    }
+  }
+}
