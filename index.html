@@ -2697,6 +2697,14 @@ function escapeHtml(str) {
 setSourceMode("album");
 renderHome();
 renderList();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch((e) => {
+      console.error("[ServiceWorker] 등록 실패:", e);
+    });
+  });
+}
 </script>
 </body>
 </html>
