@@ -2276,8 +2276,15 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
     // 화면(기존 statusText 영역)에도 원문 응답 일부를 보여줘서
     // 어떤 응답 때문에 실패했는지 바로 확인할 수 있도록 함
     const snippet = content.slice(0, 120).replace(/\s+/g, " ").trim();
+    // 원인 파악용 임시 디버그 정보 (finishReason/토큰 사용량) - 콘솔을 볼 수
+    // 없는 환경(iOS PWA 등)에서도 화면에서 바로 확인할 수 있도록 노출한다.
+    const debugInfo = {
+      finishReason: data.candidates?.[0]?.finishReason,
+      usage: data.usageMetadata,
+    };
     throw new Error(
-      `모델 응답을 JSON으로 해석할 수 없습니다. (원문 일부: "${snippet}${content.length > 120 ? "..." : ""}")`
+      `모델 응답을 JSON으로 해석할 수 없습니다. (원문 일부: "${snippet}${content.length > 120 ? "..." : ""}") ` +
+        `[디버그: ${JSON.stringify(debugInfo)}]`
     );
   }
 
