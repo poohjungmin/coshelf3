@@ -60,7 +60,12 @@ async function sendPush(subscription, payload) {
 
 async function processDevice(docSnap) {
   const device = docSnap.data();
-  if (!device.subscription) return;
+  const logPrefix = `[send-notifications] ${docSnap.id}:`;
+
+  if (!device.subscription) {
+    console.log(`${logPrefix} 구독 없음 - 건너뜀`);
+    return;
+  }
 
   const { dateStr: todayStr, hhmm: nowHHMM } = kstNow();
   const times = Array.isArray(device.times) ? device.times : [];
@@ -70,12 +75,27 @@ async function processDevice(docSnap) {
   let changed = false;
   let subscriptionExpired = false;
 
+  console.log(
+    `${logPrefix} times=${JSON.stringify(times)} days=${JSON.stringify(days)} ` +
+      `products=${products.length}개 notifiedDates=${JSON.stringify(notifiedDates)}`
+  );
+
   for (const time of times) {
     if (subscriptionExpired) break;
-    if (nowHHMM < time) continue; // 아직 이 시각 전
-    if (notifiedDates[time] === todayStr) continue; // 오늘 이 시각은 이미 처리함
+    if (nowHHMM < time) {
+      console.log(`${logPrefix} ${time} - 아직 안 지남 (현재 ${nowHHMM})`);
+      continue;
+    }
+    if (notifiedDates[time] === todayStr) {
+      console.log(`${logPrefix} ${time} - 오늘 이미 처리함`);
+      continue;
+    }
 
     const matched = products.filter((p) => days.includes(computeDday(p.expiryDate, todayStr)));
+    console.log(
+      `${logPrefix} ${time} 처리 중 - 매칭 제품 ${matched.length}개 ` +
+        `(제품별 D-day: ${products.map((p) => `${p.brand ?? ""}${p.product ?? ""}=${computeDday(p.expiryDate, todayStr)}`).join(", ")})`
+    );
 
     if (matched.length > 0) {
       const firstLabel = [matched[0].brand, matched[0].product].filter(Boolean).join(" ") || "제품";
@@ -89,11 +109,12 @@ async function processDevice(docSnap) {
         body,
         url: "./",
       });
+      console.log(`${logPrefix} push 발송 결과: ${JSON.stringify(result)}`);
 
       if (!result.ok && (result.statusCode === 404 || result.statusCode === 410)) {
         // 브라우저/OS에서 이미 만료된 구독 - 다음 앱 실행 때 재구독하도록 비운다
         await docSnap.ref.update({ subscription: null });
-        console.log(`[send-notifications] ${docSnap.id}: 만료된 구독 정리`);
+        console.log(`${logPrefix} 만료된 구독 정리`);
         subscriptionExpired = true;
         break;
       }
