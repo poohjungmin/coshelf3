@@ -2162,11 +2162,12 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
       // 모델 출력이 항상 유효한 JSON 객체가 되도록 강제
       responseMimeType: "application/json",
       temperature: 0, // 추측/창작을 줄이고 일관된 답변을 얻기 위해 0으로 설정
-      maxOutputTokens: 1024, // 응답이 도중에 잘려 JSON이 깨지는 것을 방지하기 위해 넉넉하게 설정
       // gemini-3.5-flash는 기본적으로 "생각(thinking)" 토큰을 쓰는데, 이 토큰이
       // maxOutputTokens 예산을 함께 소모해서 실제 JSON 응답이 잘리는 문제가 있었다.
-      // 이 작업은 이미지에서 몇 개 필드만 뽑아내는 단순 추출이라 깊은 추론이
-      // 필요 없으므로 thinking을 최소로 낮춰 예산을 출력에 온전히 쓰도록 한다.
+      // thinkingLevel을 minimal로 낮춰도 완전히 사라지지는 않는 것으로 보여,
+      // 실제 JSON 출력 자체는 아주 짧다는 점을 고려해 한도를 넉넉히 잡는다
+      // (정상 응답 시에는 모델이 다 쓰고 나면 멈추므로 속도에 영향 없음).
+      maxOutputTokens: 3072,
       thinkingConfig: { thinkingLevel: "minimal" },
     },
   };
@@ -2245,6 +2246,15 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
   if (!content) {
     console.error("[Gemini] 텍스트를 찾지 못함. raw response:", data);
     throw new Error("응답에서 결과 텍스트를 찾을 수 없습니다.");
+  }
+
+  // 응답이 토큰 한도에 걸려 도중에 잘린 경우, JSON 파싱 실패보다
+  // 원인을 바로 알 수 있는 메시지를 보여준다.
+  if (data.candidates?.[0]?.finishReason === "MAX_TOKENS") {
+    console.error("[Gemini] MAX_TOKENS로 응답이 잘림. raw text:", content);
+    throw new Error(
+      "모델 응답이 토큰 한도에 걸려 잘렸습니다. 잠시 후 다시 시도해주세요."
+    );
   }
 
   // 디버깅용: 파싱 전 원문 텍스트 출력
