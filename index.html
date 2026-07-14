@@ -941,6 +941,104 @@
     font-size: 13px;
     color: var(--text-secondary);
   }
+
+  /* ============================================================
+     설정 화면 - 알림
+     ============================================================ */
+  .notify-switch {
+    position: relative;
+    width: 46px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--border);
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease;
+  }
+  .notify-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform 0.15s ease;
+  }
+  .notify-switch.active { background: var(--success); }
+  .notify-switch.active::after { transform: translateX(18px); }
+
+  .notify-subrow {
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+    margin-top: 14px;
+  }
+  .notify-subrow .threshold-label { display: block; margin-bottom: 10px; }
+
+  .notify-chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .notify-chip {
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .notify-chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .notify-time-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 6px 8px 14px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .notify-time-chip button {
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 6px;
+  }
+
+  .notify-time-add-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+  }
+  .notify-time-add-row input[type="time"] {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    font-family: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
 </style>
 </head>
 <body>
@@ -1094,6 +1192,45 @@
       🔴 사용기한이 임박한 제품<br />
       🟡 미리 준비하면 좋은 제품<br />
       🟢 아직 여유가 있는 제품
+    </p>
+
+    <h2 class="settings-section-title">알림</h2>
+    <section class="card">
+      <div class="settings-row">
+        <span class="settings-label">소비기한 알림 받기</span>
+        <button type="button" class="notify-switch" id="notifyEnabledSwitch" aria-pressed="false" aria-label="알림 받기"></button>
+      </div>
+
+      <div id="notifyDetailFields" style="display: none;">
+        <div class="notify-subrow">
+          <span class="threshold-label">알림 시점 (복수 선택 가능)</span>
+          <div class="notify-chip-group" id="notifyDayChips">
+            <button type="button" class="notify-chip" data-day="7">7일 전</button>
+            <button type="button" class="notify-chip" data-day="3">3일 전</button>
+            <button type="button" class="notify-chip" data-day="1">1일 전</button>
+            <button type="button" class="notify-chip" data-day="0">당일</button>
+          </div>
+        </div>
+
+        <div class="notify-subrow">
+          <span class="threshold-label">알림 시각 (여러 개 등록 가능)</span>
+          <div class="notify-chip-group" id="notifyTimeChips"></div>
+          <div class="notify-time-add-row">
+            <input type="time" id="notifyTimeInput" value="09:00" />
+            <button type="button" class="btn btn-secondary" id="notifyTimeAddBtn" style="width: auto; padding: 10px 16px;">추가</button>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-primary" id="notifyTestBtn" style="margin-top: 18px;">
+          테스트 알림 보내기
+        </button>
+      </div>
+
+      <p class="status" id="notifyStatus"></p>
+    </section>
+    <p class="list-sort-note">
+      알림을 받으려면 기기 알림 권한을 허용해야 합니다. iOS는 홈 화면에 앱을 추가한 상태에서만
+      알림 수신이 가능합니다. 설정한 시점/시각을 기준으로 매일 자동 확인 후 발송됩니다.
     </p>
 
     <h2 class="settings-section-title">데이터 관리</h2>
@@ -1309,6 +1446,15 @@ const redThresholdInput = document.getElementById("redThresholdInput");
 const yellowThresholdInput = document.getElementById("yellowThresholdInput");
 const thresholdSaveBtn = document.getElementById("thresholdSaveBtn");
 const thresholdStatus = document.getElementById("thresholdStatus");
+
+const notifyEnabledSwitch = document.getElementById("notifyEnabledSwitch");
+const notifyDetailFields = document.getElementById("notifyDetailFields");
+const notifyDayChips = document.getElementById("notifyDayChips");
+const notifyTimeChips = document.getElementById("notifyTimeChips");
+const notifyTimeInput = document.getElementById("notifyTimeInput");
+const notifyTimeAddBtn = document.getElementById("notifyTimeAddBtn");
+const notifyTestBtn = document.getElementById("notifyTestBtn");
+const notifyStatus = document.getElementById("notifyStatus");
 
 const keyRequiredBackdrop = document.getElementById("keyRequiredBackdrop");
 const keyRequiredEnterBtn = document.getElementById("keyRequiredEnterBtn");
@@ -1567,6 +1713,8 @@ function renderSettings() {
   yellowThresholdInput.value = YELLOW_THRESHOLD_DAYS;
   thresholdStatus.textContent = "";
   thresholdStatus.classList.remove("error", "success");
+
+  renderNotifySettings();
 }
 
 // 신호등 기준 저장 - 빨간색 기준은 반드시 노란색 기준보다 작아야 한다
@@ -2388,6 +2536,175 @@ function saveThresholdsToStorage() {
 }
 
 loadThresholdsFromStorage(); // 앱 시작 시 곧바로 사용자 설정값을 반영
+
+/* =========================================================================
+   1-6. 설정 화면 - 알림 설정 (ON/OFF, 알림 시점, 알림 시각, 테스트 알림)
+   - 지금 단계에서는 localStorage에만 저장한다. 서버(Firestore) 동기화와
+     실제 예약 발송은 이후 단계에서 이 값을 읽어가는 방식으로 연결한다.
+   ========================================================================= */
+const NOTIFY_SETTINGS_KEY = "coshelf_notify_settings";
+const NOTIFY_VALID_DAYS = [7, 3, 1, 0];
+let notifySettings = { enabled: false, days: [], times: [] };
+
+function isValidTimeString(str) {
+  return typeof str === "string" && /^([01]\d|2[0-3]):([0-5]\d)$/.test(str);
+}
+
+function loadNotifySettingsFromStorage() {
+  try {
+    const raw = localStorage.getItem(NOTIFY_SETTINGS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      notifySettings = {
+        enabled: Boolean(parsed.enabled),
+        days: Array.isArray(parsed.days)
+          ? parsed.days.filter((d) => NOTIFY_VALID_DAYS.includes(d))
+          : [],
+        times: Array.isArray(parsed.times) ? parsed.times.filter(isValidTimeString) : [],
+      };
+    }
+  } catch (e) {
+    console.error("[localStorage] 알림 설정을 불러오지 못했습니다:", e);
+  }
+}
+
+function saveNotifySettingsToStorage() {
+  try {
+    localStorage.setItem(NOTIFY_SETTINGS_KEY, JSON.stringify(notifySettings));
+  } catch (e) {
+    console.error("[localStorage] 알림 설정을 저장하지 못했습니다:", e);
+  }
+}
+
+loadNotifySettingsFromStorage();
+
+function renderNotifySettings() {
+  notifyEnabledSwitch.classList.toggle("active", notifySettings.enabled);
+  notifyEnabledSwitch.setAttribute("aria-pressed", String(notifySettings.enabled));
+  notifyDetailFields.style.display = notifySettings.enabled ? "block" : "none";
+
+  notifyDayChips.querySelectorAll(".notify-chip").forEach((chip) => {
+    const day = Number(chip.dataset.day);
+    chip.classList.toggle("active", notifySettings.days.includes(day));
+  });
+
+  const sortedTimes = [...notifySettings.times].sort();
+  notifyTimeChips.innerHTML = sortedTimes
+    .map(
+      (t) => `
+        <span class="notify-time-chip" data-time="${t}">
+          ${t}
+          <button type="button" class="notify-time-remove-btn" data-time="${t}" aria-label="${t} 삭제">✕</button>
+        </span>`
+    )
+    .join("");
+
+  notifyStatus.textContent = "";
+  notifyStatus.classList.remove("error", "success");
+}
+
+async function requestNotifyPermission() {
+  if (!("Notification" in window)) {
+    return "unsupported";
+  }
+  let permission = Notification.permission;
+  if (permission === "default") {
+    permission = await Notification.requestPermission();
+  }
+  return permission;
+}
+
+// ON으로 켜는 순간(=사용자 제스처 컨텍스트 안)에 알림 권한을 요청한다.
+// iOS Safari는 사용자 제스처 없이 호출된 권한 요청을 무시하므로 반드시
+// 클릭 핸들러 안에서 바로 호출해야 한다.
+notifyEnabledSwitch.addEventListener("click", async () => {
+  if (!notifySettings.enabled) {
+    const permission = await requestNotifyPermission();
+    if (permission === "unsupported") {
+      notifyStatus.textContent = "이 브라우저는 알림을 지원하지 않습니다.";
+      notifyStatus.classList.add("error");
+      return;
+    }
+    if (permission !== "granted") {
+      notifyStatus.textContent = "알림 권한이 거부되어 있습니다. 브라우저/기기 설정에서 허용해주세요.";
+      notifyStatus.classList.add("error");
+      return;
+    }
+  }
+  notifySettings.enabled = !notifySettings.enabled;
+  saveNotifySettingsToStorage();
+  renderNotifySettings();
+});
+
+notifyDayChips.addEventListener("click", (e) => {
+  const chip = e.target.closest(".notify-chip");
+  if (!chip) return;
+  const day = Number(chip.dataset.day);
+  const idx = notifySettings.days.indexOf(day);
+  if (idx >= 0) {
+    notifySettings.days.splice(idx, 1);
+  } else {
+    notifySettings.days.push(day);
+  }
+  saveNotifySettingsToStorage();
+  renderNotifySettings();
+});
+
+notifyTimeAddBtn.addEventListener("click", () => {
+  const value = notifyTimeInput.value;
+  notifyStatus.classList.remove("error", "success");
+  if (!isValidTimeString(value)) {
+    notifyStatus.textContent = "올바른 시각을 선택해주세요.";
+    notifyStatus.classList.add("error");
+    return;
+  }
+  if (notifySettings.times.includes(value)) {
+    notifyStatus.textContent = "이미 등록된 시각입니다.";
+    notifyStatus.classList.add("error");
+    return;
+  }
+  notifySettings.times.push(value);
+  saveNotifySettingsToStorage();
+  renderNotifySettings();
+});
+
+notifyTimeChips.addEventListener("click", (e) => {
+  const btn = e.target.closest(".notify-time-remove-btn");
+  if (!btn) return;
+  notifySettings.times = notifySettings.times.filter((t) => t !== btn.dataset.time);
+  saveNotifySettingsToStorage();
+  renderNotifySettings();
+});
+
+notifyTestBtn.addEventListener("click", async () => {
+  notifyStatus.classList.remove("error", "success");
+  if (!("serviceWorker" in navigator)) {
+    notifyStatus.textContent = "이 브라우저는 알림을 지원하지 않습니다.";
+    notifyStatus.classList.add("error");
+    return;
+  }
+  const permission = await requestNotifyPermission();
+  if (permission !== "granted") {
+    notifyStatus.textContent = "알림 권한이 거부되어 있습니다. 브라우저/기기 설정에서 허용해주세요.";
+    notifyStatus.classList.add("error");
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    await reg.showNotification("Coshelf 테스트 알림", {
+      body: "이렇게 소비기한 알림이 표시됩니다.",
+      icon: "icon.png",
+      badge: "icon.png",
+    });
+    notifyStatus.textContent = "테스트 알림을 보냈습니다.";
+    notifyStatus.classList.add("success");
+  } catch (e) {
+    console.error("[알림] 테스트 알림 전송 실패:", e);
+    notifyStatus.textContent = "테스트 알림 전송에 실패했습니다.";
+    notifyStatus.classList.add("error");
+  }
+});
 
 function computeDday(expiryStr) {
   const today = new Date();
