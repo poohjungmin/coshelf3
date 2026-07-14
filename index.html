@@ -2571,8 +2571,8 @@ async function getOrCreatePushSubscription() {
   return sub;
 }
 
-// 알림 설정 + 제품 유효기한 요약(id, expiryDate만)을 기기 문서에 저장한다.
-// 사진/브랜드/API Key 등 다른 데이터는 서버로 전송하지 않는다.
+// 알림 설정 + 제품 요약(브랜드/제품명/유효기한)을 기기 문서에 저장한다.
+// 사진(imageDataUrl)과 API Key는 서버로 전송하지 않는다.
 async function syncNotifyStateToFirestore() {
   if (!window.coshelfFirebase) return;
   try {
@@ -2592,7 +2592,14 @@ async function syncNotifyStateToFirestore() {
         days: notifySettings.days,
         times: notifySettings.times,
         subscription,
-        products: products.map((p) => ({ id: p.id, expiryDate: p.expiryDate })),
+        // 사진(imageDataUrl)과 카테고리 등은 제외하고, 알림 문구 구성에 필요한
+        // 최소 정보(브랜드/제품명/유효기한)만 서버로 보낸다.
+        products: products.map((p) => ({
+          id: p.id,
+          brand: p.brand,
+          product: p.product,
+          expiryDate: p.expiryDate,
+        })),
         updatedAt: serverTimestamp(),
       },
       { merge: true }

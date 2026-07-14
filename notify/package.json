@@ -1,0 +1,10 @@
+{
+  "name": "coshelf-notify",
+  "private": true,
+  "type": "commonjs",
+  "description": "GitHub Actions 스케줄 워크플로에서 실행되는 알림 발송 스크립트",
+  "dependencies": {
+    "firebase-admin": "^14.1.0",
+    "web-push": "^3.6.7"
+  }
+}
