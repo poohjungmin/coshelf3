@@ -2128,7 +2128,12 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
       // 모델 출력이 항상 유효한 JSON 객체가 되도록 강제
       responseMimeType: "application/json",
       temperature: 0, // 추측/창작을 줄이고 일관된 답변을 얻기 위해 0으로 설정
-      maxOutputTokens: 800, // 응답이 도중에 잘려 JSON이 깨지는 것을 방지하기 위해 넉넉하게 설정
+      maxOutputTokens: 1024, // 응답이 도중에 잘려 JSON이 깨지는 것을 방지하기 위해 넉넉하게 설정
+      // gemini-3.5-flash는 기본적으로 "생각(thinking)" 토큰을 쓰는데, 이 토큰이
+      // maxOutputTokens 예산을 함께 소모해서 실제 JSON 응답이 잘리는 문제가 있었다.
+      // 이 작업은 이미지에서 몇 개 필드만 뽑아내는 단순 추출이라 깊은 추론이
+      // 필요 없으므로 thinking을 최소로 낮춰 예산을 출력에 온전히 쓰도록 한다.
+      thinkingConfig: { thinkingLevel: "minimal" },
     },
   };
 
