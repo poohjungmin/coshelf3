@@ -1,7 +1,8 @@
 // GitHub Actions 스케줄(15분 주기)로 실행되어, 알림을 켠 기기 중 지금
 // 시각이 등록된 알림 시각을 지난 기기를 찾아 Web Push를 보낸다.
 // 시간대는 이 앱의 대상 사용자 기준으로 Asia/Seoul(KST) 고정이다.
-const admin = require("firebase-admin");
+const { initializeApp, cert } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
 const webpush = require("web-push");
 
 // index.html에 커밋된 공개키와 동일한 값 (공개키는 비밀값이 아니다)
@@ -20,8 +21,8 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-const db = admin.firestore();
+const app = initializeApp({ credential: cert(serviceAccount) });
+const db = getFirestore(app);
 
 function kstNow() {
   const parts = new Intl.DateTimeFormat("en-CA", {
