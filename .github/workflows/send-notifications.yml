@@ -5,6 +5,13 @@ on:
     - cron: "*/15 * * * *"
   workflow_dispatch: {}
 
+# 스케줄 실행과 수동 실행이 겹치면 같은 기기를 동시에 처리해 중복 발송이나
+# notifiedDates 갱신 유실이 생길 수 있으므로, 겹치는 실행은 큐에 세워둔다
+# (건너뛰지 않고 순서대로 실행 - cancel-in-progress: false).
+concurrency:
+  group: send-notifications
+  cancel-in-progress: false
+
 jobs:
   send:
     runs-on: ubuntu-latest

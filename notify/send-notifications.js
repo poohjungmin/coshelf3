@@ -97,6 +97,8 @@ async function processDevice(docSnap) {
         `(제품별 D-day: ${products.map((p) => `${p.brand ?? ""}${p.product ?? ""}=${computeDday(p.expiryDate, todayStr)}`).join(", ")})`
     );
 
+    let shouldMarkDone = true;
+
     if (matched.length > 0) {
       const firstLabel = [matched[0].brand, matched[0].product].filter(Boolean).join(" ") || "제품";
       const body =
@@ -111,17 +113,26 @@ async function processDevice(docSnap) {
       });
       console.log(`${logPrefix} push 발송 결과: ${JSON.stringify(result)}`);
 
-      if (!result.ok && (result.statusCode === 404 || result.statusCode === 410)) {
-        // 브라우저/OS에서 이미 만료된 구독 - 다음 앱 실행 때 재구독하도록 비운다
-        await docSnap.ref.update({ subscription: null });
-        console.log(`${logPrefix} 만료된 구독 정리`);
-        subscriptionExpired = true;
-        break;
+      if (!result.ok) {
+        if (result.statusCode === 404 || result.statusCode === 410) {
+          // 브라우저/OS에서 이미 만료된 구독 - 다음 앱 실행 때 재구독하도록 비운다.
+          // 재구독 전까지는 어차피 보낼 수 없으므로 오늘 처리 완료로 표시한다.
+          await docSnap.ref.update({ subscription: null });
+          console.log(`${logPrefix} 만료된 구독 정리`);
+          subscriptionExpired = true;
+        } else {
+          // 네트워크 오류 등 일시적 실패로 추정 - 오늘 처리 완료로 표시하지 않아
+          // 15분 뒤 다음 실행에서 같은 시각에 대해 다시 시도하게 한다.
+          console.warn(`${logPrefix} ${time} 발송 실패(일시적으로 추정) - 다음 실행에 재시도`);
+          shouldMarkDone = false;
+        }
       }
     }
 
-    notifiedDates[time] = todayStr;
-    changed = true;
+    if (shouldMarkDone) {
+      notifiedDates[time] = todayStr;
+      changed = true;
+    }
   }
 
   if (changed) {
