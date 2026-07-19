@@ -1759,6 +1759,7 @@ thresholdSaveBtn.addEventListener("click", () => {
   RED_THRESHOLD_DAYS = redVal;
   YELLOW_THRESHOLD_DAYS = yellowVal;
   saveThresholdsToStorage();
+  syncThresholdsToCloud(); // 로그인 상태라면 Firestore에도 반영
 
   thresholdStatus.textContent = "저장되었습니다.";
   thresholdStatus.classList.remove("error");
@@ -2321,6 +2322,7 @@ saveBtn.addEventListener("click", () => {
   }
 
   const isEditing = editingProductId !== null;
+  let savedProduct;
 
   if (isEditing) {
     // 기존 제품 수정: 새 항목을 추가하지 않고 해당 id의 데이터만 갱신
@@ -2332,10 +2334,11 @@ saveBtn.addEventListener("click", () => {
       target.expiryDate = expiryDate;
       target.imageDataUrl = selectedBase64; // 사진을 새로 고르지 않았다면 기존 값 그대로 유지됨
       target.favorite = currentFavorite;
+      savedProduct = target;
     }
   } else {
     // 신규 제품 등록
-    products.push({
+    savedProduct = {
       id: Date.now(),
       brand: brandInput.value.trim(),
       product: productName,
@@ -2344,11 +2347,14 @@ saveBtn.addEventListener("click", () => {
       imageDataUrl: selectedBase64, // 직접입력 모드에서는 null일 수 있음
       createdAt: new Date().toISOString(),
       favorite: currentFavorite,
-    });
+    };
+    products.push(savedProduct);
   }
 
   // localStorage에 즉시 반영
   saveProductsToStorage();
+  // 로그인 상태라면 이 제품 하나만 Firestore에도 반영(전체 재업로드 방지)
+  if (savedProduct) syncProductToCloud(savedProduct);
 
   // 홈/목록 화면도 바로 최신 상태로 다시 그린다
   renderHome();
@@ -2428,6 +2434,7 @@ function openEditProduct(id) {
 function deleteProduct(id) {
   products = products.filter((p) => p.id !== id);
   saveProductsToStorage();
+  deleteProductFromCloud(id); // 로그인 상태라면 Firestore에서도 이 문서만 삭제
   renderHome();
   renderList();
 }
@@ -2840,7 +2847,9 @@ async function syncWithCloud() {
       const cloudProductsSnap = await getDocs(collection(db, "users", uid, "products"));
       const cloudProductMap = new Map();
       cloudProductsSnap.forEach((d) => cloudProductMap.set(d.id, d.data()));
-      const localOnly = products.filter((p) => !cloudProductMap.has(p.id));
+      // 제품 id는 로컬에서 숫자(Date.now())로 만들어지지만 Firestore 문서
+      // ID는 항상 문자열이라, String()으로 맞춰서 비교해야 정확히 매칭된다.
+      const localOnly = products.filter((p) => !cloudProductMap.has(String(p.id)));
       mergedProducts = [...cloudProductMap.values(), ...localOnly];
 
       const cloudData = userDocSnap.data();
@@ -2860,7 +2869,7 @@ async function syncWithCloud() {
     // 어느 기기에서 다시 로그인해도 항상 최신 합집합을 받아가도록 한다.
     const batch = writeBatch(db);
     mergedProducts.forEach((p) => {
-      batch.set(doc(db, "users", uid, "products", p.id), { ...p, updatedAt: serverTimestamp() });
+      batch.set(doc(db, "users", uid, "products", String(p.id)), { ...p, updatedAt: serverTimestamp() });
     });
     batch.set(userDocRef, { thresholds: mergedThresholds, updatedAt: serverTimestamp() }, { merge: true });
     await batch.commit();
@@ -2875,6 +2884,60 @@ async function syncWithCloud() {
     console.error("[클라우드 백업] 동기화 실패:", e);
     cloudSyncStatus.textContent = "동기화에 실패했습니다. 잠시 후 다시 시도해주세요.";
     cloudSyncStatus.classList.add("error");
+  }
+}
+
+// 로그인 상태(익명이 아님)일 때만 동작하는 헬퍼 - 매번 로그인 여부를
+// 각자 확인하지 않도록 공통으로 뺐다.
+function isCloudSyncActive() {
+  return Boolean(
+    window.coshelfFirebase &&
+      window.coshelfFirebase.auth.currentUser &&
+      !window.coshelfFirebase.auth.currentUser.isAnonymous
+  );
+}
+
+// 제품 하나가 추가/수정될 때마다 호출 - 전체 컬렉션을 다시 쓰지 않고
+// 이 제품 문서 1건만 upsert한다(불필요한 write 최소화).
+async function syncProductToCloud(product) {
+  if (!isCloudSyncActive()) return;
+  const { db, auth, doc, setDoc, serverTimestamp } = window.coshelfFirebase;
+  try {
+    await setDoc(doc(db, "users", auth.currentUser.uid, "products", String(product.id)), {
+      ...product,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (e) {
+    console.error("[클라우드 백업] 제품 동기화 실패:", e);
+  }
+}
+
+// 제품이 삭제될 때마다 호출 - 해당 문서 1건만 삭제한다.
+async function deleteProductFromCloud(id) {
+  if (!isCloudSyncActive()) return;
+  const { db, auth, doc, deleteDoc } = window.coshelfFirebase;
+  try {
+    await deleteDoc(doc(db, "users", auth.currentUser.uid, "products", String(id)));
+  } catch (e) {
+    console.error("[클라우드 백업] 제품 삭제 동기화 실패:", e);
+  }
+}
+
+// 신호등 기준이 저장될 때마다 호출 - users/{uid} 문서 1건만 merge한다.
+async function syncThresholdsToCloud() {
+  if (!isCloudSyncActive()) return;
+  const { db, auth, doc, setDoc, serverTimestamp } = window.coshelfFirebase;
+  try {
+    await setDoc(
+      doc(db, "users", auth.currentUser.uid),
+      {
+        thresholds: { red: RED_THRESHOLD_DAYS, yellow: YELLOW_THRESHOLD_DAYS },
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (e) {
+    console.error("[클라우드 백업] 신호등 기준 동기화 실패:", e);
   }
 }
 
