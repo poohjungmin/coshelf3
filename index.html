@@ -863,6 +863,54 @@
     margin: 0 4px 10px;
   }
 
+  /* ============================================================
+     설정 화면 - 최상위 메뉴 목록 (iOS 설정 앱 스타일 드릴다운)
+     ============================================================ */
+  .settings-menu-list {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .settings-menu-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 16px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .settings-menu-row:last-child { border-bottom: none; }
+  .settings-menu-row:active { opacity: 0.6; }
+  .settings-menu-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: 12px;
+  }
+  .settings-menu-preview {
+    font-size: 14px;
+    color: var(--text-secondary);
+    max-width: 42vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .settings-menu-chevron {
+    font-size: 18px;
+    color: var(--text-secondary);
+  }
+
   .settings-row {
     display: flex;
     align-items: center;
@@ -1116,7 +1164,7 @@
   <header class="top">
     <button type="button" class="back-btn" id="registerBackBtn" aria-label="뒤로가기" style="display:none;">‹</button>
     <button type="button" class="settings-btn" id="settingsBtn" aria-label="설정">⚙️</button>
-    <h1>Coshelf</h1>
+    <h1 id="headerTitle">Coshelf</h1>
   </header>
 
   <!-- ============================================================
@@ -1224,19 +1272,55 @@
   </section>
 
   <!-- ============================================================
-       화면 4) 설정 - Gemini API Key 확인 / 변경 / 삭제 + 데이터 백업/복원
+       화면 4) 설정 - 메뉴 목록. 각 행을 누르면 상세 화면으로 이동한다
+       (iOS 설정 앱처럼 한 화면에 다 보여주지 않고 단계적으로 들어감).
        ============================================================ -->
   <section class="screen" id="screen-settings">
-    <h2 class="settings-section-title">AI 사진 인식 (Gemini API Key)</h2>
+    <div class="settings-menu-list">
+      <button type="button" class="settings-menu-row" data-target="screen-settings-apikey">
+        <span class="settings-menu-label">AI 사진 인식 (API Key)</span>
+        <span class="settings-menu-right">
+          <span class="settings-menu-preview" id="menuPreviewApiKey"></span>
+          <span class="settings-menu-chevron">›</span>
+        </span>
+      </button>
+      <button type="button" class="settings-menu-row" data-target="screen-settings-threshold">
+        <span class="settings-menu-label">신호등 기준</span>
+        <span class="settings-menu-right">
+          <span class="settings-menu-preview" id="menuPreviewThreshold"></span>
+          <span class="settings-menu-chevron">›</span>
+        </span>
+      </button>
+      <button type="button" class="settings-menu-row" data-target="screen-settings-notify">
+        <span class="settings-menu-label">알림</span>
+        <span class="settings-menu-right">
+          <span class="settings-menu-preview" id="menuPreviewNotify"></span>
+          <span class="settings-menu-chevron">›</span>
+        </span>
+      </button>
+      <button type="button" class="settings-menu-row" data-target="screen-settings-backup">
+        <span class="settings-menu-label">백업</span>
+        <span class="settings-menu-right">
+          <span class="settings-menu-preview" id="menuPreviewBackup"></span>
+          <span class="settings-menu-chevron">›</span>
+        </span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ---- 설정 > AI 사진 인식 (API Key) ---- -->
+  <section class="screen" id="screen-settings-apikey" data-settings-title="AI 사진 인식">
     <section class="card" id="settingsApiKeyCard">
-      <!-- JS(renderSettings)가 저장 여부에 따라 아래 내용을 채워 넣습니다 -->
+      <!-- JS(renderApiKeySettings)가 저장 여부에 따라 아래 내용을 채워 넣습니다 -->
     </section>
     <p class="list-sort-note">
       API Key는 이 기기의 브라우저(localStorage)에만 저장되며, 외부로 전송되지 않습니다.
       Key가 없어도 앱의 다른 기능(등록/목록/수정/삭제/필터)은 그대로 사용할 수 있습니다.
     </p>
+  </section>
 
-    <h2 class="settings-section-title">신호등 기준</h2>
+  <!-- ---- 설정 > 신호등 기준 ---- -->
+  <section class="screen" id="screen-settings-threshold" data-settings-title="신호등 기준">
     <section class="card">
       <div class="threshold-row">
         <span class="threshold-label">🔴 빨간색 기준</span>
@@ -1262,8 +1346,10 @@
       🟡 미리 준비하면 좋은 제품<br />
       🟢 아직 여유가 있는 제품
     </p>
+  </section>
 
-    <h2 class="settings-section-title">알림</h2>
+  <!-- ---- 설정 > 알림 ---- -->
+  <section class="screen" id="screen-settings-notify" data-settings-title="알림">
     <section class="card">
       <div class="settings-row">
         <span class="settings-label">소비기한 알림 받기</span>
@@ -1293,8 +1379,10 @@
       알림을 받으려면 기기 알림 권한을 허용해야 합니다. iOS는 홈 화면에 앱을 추가한 상태에서만
       알림 수신이 가능합니다. 설정한 시점/시각을 기준으로 매일 자동 확인 후 발송됩니다.
     </p>
+  </section>
 
-    <h2 class="settings-section-title">클라우드 동기화</h2>
+  <!-- ---- 설정 > 백업 ---- -->
+  <section class="screen" id="screen-settings-backup" data-settings-title="백업">
     <section class="card">
       <div id="cloudSyncLoggedOut">
         <p class="status" style="margin: 0 0 14px;">
@@ -1612,13 +1700,21 @@ function showToast(message, type = "default") {
   toastTimer = setTimeout(() => toastEl.classList.remove("show"), 2500);
 }
 
-const screens = {
-  "screen-home": document.getElementById("screen-home"),
-  "screen-register": document.getElementById("screen-register"),
-  "screen-list": document.getElementById("screen-list"),
-  "screen-settings": document.getElementById("screen-settings"),
-};
+// .screen 요소를 전부 자동으로 모은다 - 설정 하위 화면이 늘어나도
+// 여기를 따로 안 건드려도 된다.
+const screens = {};
+document.querySelectorAll(".screen").forEach((el) => {
+  screens[el.id] = el;
+});
 const tabButtons = document.querySelectorAll(".tab-btn");
+const headerTitle = document.getElementById("headerTitle");
+
+// 설정 하위 화면(screen-settings-*)은 뒤로가기를 누르면 항상 설정
+// 메뉴로 돌아간다. 등록/수정 화면만 "저장 안 한 변경사항" 확인이 필요해서
+// 별도 로직(registerBackBtn 리스너)을 그대로 유지한다.
+function isSettingsSubScreen(screenId) {
+  return screenId.startsWith("screen-settings-");
+}
 
 function showScreen(screenId) {
   Object.values(screens).forEach((el) => el.classList.remove("active"));
@@ -1631,15 +1727,31 @@ function showScreen(screenId) {
   // 검색창은 목록 화면에서만 하단 탭바 위에 노출
   listSearchBar.classList.toggle("visible", screenId === "screen-list");
 
-  // 헤더 좌측 아이콘: 등록/수정 화면에서는 뒤로가기, 그 외에는 설정(⚙️)
-  const isRegisterScreen = screenId === "screen-register";
-  registerBackBtn.style.display = isRegisterScreen ? "block" : "none";
-  settingsBtn.style.display = isRegisterScreen ? "none" : "block";
+  // 헤더 좌측 아이콘: 등록/수정 화면과 설정 하위 화면에서는 뒤로가기,
+  // 그 외(홈/목록/설정 메뉴)에는 설정(⚙️) 버튼
+  const showBackBtn = screenId === "screen-register" || isSettingsSubScreen(screenId);
+  registerBackBtn.style.display = showBackBtn ? "block" : "none";
+  settingsBtn.style.display = showBackBtn ? "none" : "block";
+
+  // 헤더 타이틀: 설정 하위 화면은 data-settings-title을, 그 외에는 "Coshelf"를 보여준다
+  // (iOS 설정 앱처럼 지금 어떤 항목을 보고 있는지 헤더에서 바로 알 수 있게)
+  headerTitle.textContent = isSettingsSubScreen(screenId)
+    ? screens[screenId].dataset.settingsTitle || "Coshelf"
+    : "Coshelf";
 
   if (screenId === "screen-home") renderHome();
   if (screenId === "screen-list") renderList();
-  if (screenId === "screen-settings") renderSettings();
+  if (screenId === "screen-settings") renderSettingsMenu();
+  if (screenId === "screen-settings-apikey") renderApiKeySettings();
+  if (screenId === "screen-settings-threshold") renderThresholdSettings();
+  if (screenId === "screen-settings-notify") renderNotifySettings();
+  if (screenId === "screen-settings-backup") renderCloudSyncUI();
 }
+
+// 설정 메뉴 행 클릭 -> 해당 상세 화면으로 이동
+document.querySelectorAll(".settings-menu-row").forEach((row) => {
+  row.addEventListener("click", () => showScreen(row.dataset.target));
+});
 
 // ⚙️ 설정 화면 진입 (하단 탭바와 별개로 헤더의 톱니바퀴 버튼으로 이동)
 settingsBtn.addEventListener("click", () => showScreen("screen-settings"));
@@ -1772,7 +1884,7 @@ apiKeySaveBtn.addEventListener("click", () => {
   }
 
   // 설정 화면이 열려 있었을 수도 있으니 최신 상태로 다시 그린다
-  renderSettings();
+  renderApiKeySettings();
 });
 
 /* =========================================================================
@@ -1782,7 +1894,7 @@ function maskApiKey(key) {
   return key.slice(0, 6) + "******";
 }
 
-function renderSettings() {
+function renderApiKeySettings() {
   const key = getStoredApiKey();
 
   if (key) {
@@ -1801,7 +1913,7 @@ function renderSettings() {
     });
     document.getElementById("settingsDeleteKeyBtn").addEventListener("click", () => {
       removeStoredApiKey();
-      renderSettings();
+      renderApiKeySettings();
     });
   } else {
     settingsApiKeyCard.innerHTML = `
@@ -1814,15 +1926,33 @@ function renderSettings() {
       openKeyInputModal();
     });
   }
+}
 
-  // 신호등 기준 입력값도 최신 상태로 채워 넣는다
+function renderThresholdSettings() {
   redThresholdInput.value = RED_THRESHOLD_DAYS;
   yellowThresholdInput.value = YELLOW_THRESHOLD_DAYS;
   thresholdStatus.textContent = "";
   thresholdStatus.classList.remove("error", "success");
+}
 
-  renderNotifySettings();
-  renderCloudSyncUI();
+// 설정 메뉴(최상위 목록) - 각 행 오른쪽에 iOS 설정 앱처럼 짧은 미리보기를 보여준다
+const menuPreviewApiKey = document.getElementById("menuPreviewApiKey");
+const menuPreviewThreshold = document.getElementById("menuPreviewThreshold");
+const menuPreviewNotify = document.getElementById("menuPreviewNotify");
+const menuPreviewBackup = document.getElementById("menuPreviewBackup");
+
+function renderSettingsMenu() {
+  const key = getStoredApiKey();
+  menuPreviewApiKey.textContent = key ? maskApiKey(key) : "설정 안 됨";
+
+  menuPreviewThreshold.textContent = `🔴${RED_THRESHOLD_DAYS}일 · 🟡${YELLOW_THRESHOLD_DAYS}일`;
+
+  menuPreviewNotify.textContent = notifySettings.enabled
+    ? `켜짐 (${notifySettings.rules.length}개)`
+    : "꺼짐";
+
+  const user = window.coshelfFirebase && window.coshelfFirebase.auth.currentUser;
+  menuPreviewBackup.textContent = user && !user.isAnonymous ? user.email : "로그인 안 함";
 }
 
 // 신호등 기준 저장 - 빨간색 기준은 반드시 노란색 기준보다 작아야 한다
@@ -2377,6 +2507,11 @@ function leaveRegisterScreenWithoutSaving() {
 }
 
 registerBackBtn.addEventListener("click", () => {
+  const currentScreenId = document.querySelector(".screen.active")?.id;
+  if (isSettingsSubScreen(currentScreenId)) {
+    showScreen("screen-settings");
+    return;
+  }
   if (hasUnsavedChanges()) {
     discardConfirmBackdrop.classList.add("open");
   } else {
@@ -3022,6 +3157,7 @@ async function syncWithCloud() {
     renderHome();
     renderList();
     renderCloudSyncUI();
+    renderSettingsMenu(); // 병합으로 신호등 기준 등이 바뀌었을 수 있어 미리보기도 갱신
     cloudSyncLastSynced.textContent = new Date().toLocaleString("ko-KR");
     cloudSyncStatus.textContent = "동기화가 완료되었습니다.";
     cloudSyncStatus.classList.add("success");
@@ -3094,6 +3230,7 @@ async function syncThresholdsToCloud() {
 let cloudSyncedThisSession = false;
 window.addEventListener("coshelf-auth-changed", async () => {
   renderCloudSyncUI();
+  renderSettingsMenu(); // 설정 메뉴의 "백업" 행 미리보기(이메일/로그인 안 함)도 갱신
   // 이벤트에 실려온 값이 아니라, 그 시점의 실제 인증 상태를 다시 읽어서
   // 판단한다(이벤트 payload와 실제 상태가 어긋날 여지를 원천 차단).
   const user = window.coshelfFirebase.auth.currentUser;
