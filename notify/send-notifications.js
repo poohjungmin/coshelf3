@@ -68,32 +68,35 @@ async function processDevice(docSnap) {
   }
 
   const { dateStr: todayStr, hhmm: nowHHMM } = kstNow();
-  const times = Array.isArray(device.times) ? device.times : [];
-  const days = Array.isArray(device.days) ? device.days : [];
+  // rules: [{ day: 0|1, time: "HH:MM" }] - 시점(하루 전/당일)과 시각이 묶인
+  // 규칙 단위. 예전의 days[]×times[] 교차 조합 방식을 대체한다.
+  const rules = Array.isArray(device.rules) ? device.rules : [];
   const products = Array.isArray(device.products) ? device.products : [];
-  const notifiedDates = { ...(device.notifiedDates || {}) };
+  const notifiedRules = { ...(device.notifiedRules || {}) };
   let changed = false;
   let subscriptionExpired = false;
 
   console.log(
-    `${logPrefix} times=${JSON.stringify(times)} days=${JSON.stringify(days)} ` +
-      `products=${products.length}개 notifiedDates=${JSON.stringify(notifiedDates)}`
+    `${logPrefix} rules=${JSON.stringify(rules)} products=${products.length}개 ` +
+      `notifiedRules=${JSON.stringify(notifiedRules)}`
   );
 
-  for (const time of times) {
+  for (const rule of rules) {
     if (subscriptionExpired) break;
-    if (nowHHMM < time) {
-      console.log(`${logPrefix} ${time} - 아직 안 지남 (현재 ${nowHHMM})`);
+    const ruleKey = `${rule.day}_${rule.time}`;
+
+    if (nowHHMM < rule.time) {
+      console.log(`${logPrefix} ${ruleKey} - 아직 안 지남 (현재 ${nowHHMM})`);
       continue;
     }
-    if (notifiedDates[time] === todayStr) {
-      console.log(`${logPrefix} ${time} - 오늘 이미 처리함`);
+    if (notifiedRules[ruleKey] === todayStr) {
+      console.log(`${logPrefix} ${ruleKey} - 오늘 이미 처리함`);
       continue;
     }
 
-    const matched = products.filter((p) => days.includes(computeDday(p.expiryDate, todayStr)));
+    const matched = products.filter((p) => computeDday(p.expiryDate, todayStr) === rule.day);
     console.log(
-      `${logPrefix} ${time} 처리 중 - 매칭 제품 ${matched.length}개 ` +
+      `${logPrefix} ${ruleKey} 처리 중 - 매칭 제품 ${matched.length}개 ` +
         `(제품별 D-day: ${products.map((p) => `${p.brand ?? ""}${p.product ?? ""}=${computeDday(p.expiryDate, todayStr)}`).join(", ")})`
     );
 
@@ -122,21 +125,21 @@ async function processDevice(docSnap) {
           subscriptionExpired = true;
         } else {
           // 네트워크 오류 등 일시적 실패로 추정 - 오늘 처리 완료로 표시하지 않아
-          // 15분 뒤 다음 실행에서 같은 시각에 대해 다시 시도하게 한다.
-          console.warn(`${logPrefix} ${time} 발송 실패(일시적으로 추정) - 다음 실행에 재시도`);
+          // 15분 뒤 다음 실행에서 같은 규칙에 대해 다시 시도하게 한다.
+          console.warn(`${logPrefix} ${ruleKey} 발송 실패(일시적으로 추정) - 다음 실행에 재시도`);
           shouldMarkDone = false;
         }
       }
     }
 
     if (shouldMarkDone) {
-      notifiedDates[time] = todayStr;
+      notifiedRules[ruleKey] = todayStr;
       changed = true;
     }
   }
 
   if (changed) {
-    await docSnap.ref.update({ notifiedDates });
+    await docSnap.ref.update({ notifiedRules });
   }
 }
 

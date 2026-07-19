@@ -1047,6 +1047,40 @@
     color: var(--text-secondary);
   }
 
+  .notify-rules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .notify-rule-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .notify-rule-row button {
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 6px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .notify-rule-empty {
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 10px 0;
+    margin: 0;
+  }
+
   /* ============================================================
      토스트 - 화면 어디에 있든 동기화 성공/실패를 짧게 안내
      ============================================================ */
@@ -1238,24 +1272,11 @@
 
       <div id="notifyDetailFields" style="display: none;">
         <div class="notify-subrow">
-          <span class="threshold-label">알림 시점 (복수 선택 가능)</span>
-          <div class="notify-chip-group" id="notifyDayChips">
-            <button type="button" class="notify-chip" data-day="7">7일 전</button>
-            <button type="button" class="notify-chip" data-day="3">3일 전</button>
-            <button type="button" class="notify-chip" data-day="1">1일 전</button>
-            <button type="button" class="notify-chip" data-day="0">당일</button>
-          </div>
-        </div>
-
-        <div class="notify-subrow">
-          <span class="threshold-label">알림 시각 (여러 개 등록 가능)</span>
-          <div class="notify-chip-group" id="notifyTimeChips"></div>
-          <div class="notify-time-add-row">
-            <select id="notifyHourSelect" class="notify-time-select" aria-label="시"></select>
-            <span class="notify-time-colon">:</span>
-            <select id="notifyMinuteSelect" class="notify-time-select" aria-label="분"></select>
-            <button type="button" class="btn btn-secondary" id="notifyTimeAddBtn" style="width: auto; padding: 10px 16px;">추가</button>
-          </div>
+          <span class="threshold-label">알림 규칙</span>
+          <div class="notify-rules-list" id="notifyRulesList"></div>
+          <button type="button" class="btn btn-secondary" id="notifyAddRuleBtn" style="margin-top: 10px;">
+            + 알림 추가
+          </button>
           <p class="list-sort-note" style="margin: 8px 4px 0; text-align: left;">
             알림은 15분 단위로 확인되어 설정한 시간에 맞춰 전송됩니다.
           </p>
@@ -1393,6 +1414,31 @@ API Key는 내 기기에만 저장되며
 </div>
 
 <!-- ============================================================
+     알림 추가 모달 (시점 1개 + 시각 1개 = 규칙 1건)
+     ============================================================ -->
+<div class="modal-backdrop" id="addNotifyRuleBackdrop">
+  <div class="modal-card">
+    <h3>알림 추가</h3>
+    <span class="threshold-label" style="display:block; text-align:left; margin-bottom: 8px;">시점</span>
+    <div class="notify-chip-group" id="addRuleDayChips">
+      <button type="button" class="notify-chip" data-day="1">하루 전</button>
+      <button type="button" class="notify-chip" data-day="0">당일</button>
+    </div>
+    <span class="threshold-label" style="display:block; text-align:left; margin: 16px 0 8px;">시각</span>
+    <div class="notify-time-add-row" style="margin-top: 0;">
+      <select id="addRuleHourSelect" class="notify-time-select" aria-label="시"></select>
+      <span class="notify-time-colon">:</span>
+      <select id="addRuleMinuteSelect" class="notify-time-select" aria-label="분"></select>
+    </div>
+    <p class="status error" id="addRuleStatus" style="text-align: left; margin: 10px 0 0; min-height: 0;"></p>
+    <div class="modal-btn-group" style="margin-top: 16px;">
+      <button type="button" class="btn btn-primary" id="addNotifyRuleConfirmBtn">완료</button>
+      <button type="button" class="btn btn-secondary" id="addNotifyRuleCancelBtn">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
      등록/수정 화면 나가기 확인 모달 (변경사항이 있을 때만 표시)
      ============================================================ -->
 <div class="modal-backdrop" id="discardConfirmBackdrop">
@@ -1488,13 +1534,18 @@ const thresholdStatus = document.getElementById("thresholdStatus");
 
 const notifyEnabledSwitch = document.getElementById("notifyEnabledSwitch");
 const notifyDetailFields = document.getElementById("notifyDetailFields");
-const notifyDayChips = document.getElementById("notifyDayChips");
-const notifyTimeChips = document.getElementById("notifyTimeChips");
-const notifyHourSelect = document.getElementById("notifyHourSelect");
-const notifyMinuteSelect = document.getElementById("notifyMinuteSelect");
-const notifyTimeAddBtn = document.getElementById("notifyTimeAddBtn");
+const notifyRulesList = document.getElementById("notifyRulesList");
+const notifyAddRuleBtn = document.getElementById("notifyAddRuleBtn");
 const notifyTestBtn = document.getElementById("notifyTestBtn");
 const notifyStatus = document.getElementById("notifyStatus");
+
+const addNotifyRuleBackdrop = document.getElementById("addNotifyRuleBackdrop");
+const addRuleDayChips = document.getElementById("addRuleDayChips");
+const addRuleHourSelect = document.getElementById("addRuleHourSelect");
+const addRuleMinuteSelect = document.getElementById("addRuleMinuteSelect");
+const addRuleStatus = document.getElementById("addRuleStatus");
+const addNotifyRuleConfirmBtn = document.getElementById("addNotifyRuleConfirmBtn");
+const addNotifyRuleCancelBtn = document.getElementById("addNotifyRuleCancelBtn");
 
 const cloudSyncLoggedOut = document.getElementById("cloudSyncLoggedOut");
 const cloudSyncLoggedIn = document.getElementById("cloudSyncLoggedIn");
@@ -2585,8 +2636,7 @@ async function syncNotifyStateToFirestore() {
       doc(db, "devices", uid),
       {
         enabled: notifySettings.enabled,
-        days: notifySettings.days,
-        times: notifySettings.times,
+        rules: notifySettings.rules,
         subscription,
         // 사진(imageDataUrl)과 카테고리 등은 제외하고, 알림 문구 구성에 필요한
         // 최소 정보(브랜드/제품명/유효기한)만 서버로 보낸다.
@@ -2600,14 +2650,17 @@ async function syncNotifyStateToFirestore() {
       },
       { merge: true }
     );
+    console.log("[Firestore] 알림 상태 동기화 성공:", notifySettings);
   } catch (e) {
     console.error("[Firestore] 알림 상태 동기화 실패:", e);
   }
 }
 
 const NOTIFY_SETTINGS_KEY = "coshelf_notify_settings";
-const NOTIFY_VALID_DAYS = [7, 3, 1, 0];
-let notifySettings = { enabled: false, days: [], times: [] };
+// 알림 시점은 "하루 전(1)"과 "당일(0)" 두 가지만 지원한다(예전 버전의
+// 7일 전/3일 전은 더 이상 선택할 수 없고, 마이그레이션 시에도 버려진다).
+const NOTIFY_VALID_DAYS = [1, 0];
+let notifySettings = { enabled: false, rules: [] }; // rules: [{ day: 0|1, time: "HH:MM" }]
 
 function isValidTimeString(str) {
   return typeof str === "string" && /^([01]\d|2[0-3]):([0-5]\d)$/.test(str);
@@ -2625,30 +2678,52 @@ function roundTimeToQuarterHour(str) {
   return `${String(rh).padStart(2, "0")}:${String(rm).padStart(2, "0")}`;
 }
 
+// 규칙 목록에서 중복(day+time 동일)을 제거하고, 시각은 15분 단위로 보정한다.
+function normalizeRules(rules) {
+  const result = [];
+  rules.forEach((r) => {
+    if (!r || !NOTIFY_VALID_DAYS.includes(r.day) || !isValidTimeString(r.time)) return;
+    const time = roundTimeToQuarterHour(r.time);
+    if (!result.some((x) => x.day === r.day && x.time === time)) {
+      result.push({ day: r.day, time });
+    }
+  });
+  return result;
+}
+
 function loadNotifySettingsFromStorage() {
   try {
     const raw = localStorage.getItem(NOTIFY_SETTINGS_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") {
-      const validTimes = Array.isArray(parsed.times) ? parsed.times.filter(isValidTimeString) : [];
-      // 15분 단위가 아닌 기존 저장값(예전 버전에서 자유롭게 선택했던 시각)을
-      // 가장 가까운 15분 단위로 보정하고, 보정으로 겹치게 된 값은 중복 제거한다.
-      const migratedTimes = Array.from(new Set(validTimes.map(roundTimeToQuarterHour))).sort();
+    if (!parsed || typeof parsed !== "object") return;
 
-      notifySettings = {
-        enabled: Boolean(parsed.enabled),
-        days: Array.isArray(parsed.days)
-          ? parsed.days.filter((d) => NOTIFY_VALID_DAYS.includes(d))
-          : [],
-        times: migratedTimes,
-      };
+    let rawRules;
+    let isOldFormat = false;
 
-      const wasMigrated = JSON.stringify([...validTimes].sort()) !== JSON.stringify(migratedTimes);
-      if (wasMigrated) {
-        console.log("[알림] 15분 단위가 아닌 저장된 시각을 보정했습니다:", validTimes, "->", migratedTimes);
-        saveNotifySettingsToStorage(); // localStorage 갱신 + (가능하면) Firestore 재동기화
-      }
+    if (Array.isArray(parsed.rules)) {
+      rawRules = parsed.rules;
+    } else {
+      // 예전 형식(시점 배열 + 시각 배열을 따로 관리) - 두 배열의 모든 조합을
+      // 규칙으로 풀어낸다. 7일 전/3일 전은 더 이상 지원하지 않아 버려진다.
+      isOldFormat = true;
+      const oldDays = Array.isArray(parsed.days) ? parsed.days : [];
+      const oldTimes = Array.isArray(parsed.times) ? parsed.times : [];
+      rawRules = [];
+      oldDays.forEach((day) => {
+        oldTimes.forEach((time) => rawRules.push({ day, time }));
+      });
+    }
+
+    const normalized = normalizeRules(rawRules);
+    notifySettings = { enabled: Boolean(parsed.enabled), rules: normalized };
+
+    if (isOldFormat) {
+      console.log(
+        "[알림] 예전 형식(시점/시각 분리 저장)을 규칙 목록으로 변환했습니다(7일 전/3일 전은 더 이상 지원하지 않아 제외됨):",
+        normalized
+      );
+      saveNotifySettingsToStorage(); // localStorage 갱신 + (가능하면) Firestore 재동기화
     }
   } catch (e) {
     console.error("[localStorage] 알림 설정을 불러오지 못했습니다:", e);
@@ -2666,46 +2741,50 @@ function saveNotifySettingsToStorage() {
 
 // 시/분 <select> 옵션을 채운다. 분은 00/15/30/45만 존재해서 애초에
 // 15분 단위가 아닌 값을 고를 수 없다.
-function populateNotifyTimeSelects() {
+function populateTimeSelect(hourSelect, minuteSelect) {
   for (let h = 0; h < 24; h++) {
     const opt = document.createElement("option");
     opt.value = String(h).padStart(2, "0");
     opt.textContent = `${String(h).padStart(2, "0")}시`;
-    notifyHourSelect.appendChild(opt);
+    hourSelect.appendChild(opt);
   }
   ["00", "15", "30", "45"].forEach((m) => {
     const opt = document.createElement("option");
     opt.value = m;
     opt.textContent = `${m}분`;
-    notifyMinuteSelect.appendChild(opt);
+    minuteSelect.appendChild(opt);
   });
-  notifyHourSelect.value = "09";
-  notifyMinuteSelect.value = "00";
+  hourSelect.value = "09";
+  minuteSelect.value = "00";
 }
-populateNotifyTimeSelects();
+populateTimeSelect(addRuleHourSelect, addRuleMinuteSelect);
 
 loadNotifySettingsFromStorage();
+
+function ruleLabel(rule) {
+  return `${rule.day === 0 ? "당일" : "하루 전"} · ${rule.time}`;
+}
 
 function renderNotifySettings() {
   notifyEnabledSwitch.classList.toggle("active", notifySettings.enabled);
   notifyEnabledSwitch.setAttribute("aria-pressed", String(notifySettings.enabled));
   notifyDetailFields.style.display = notifySettings.enabled ? "block" : "none";
 
-  notifyDayChips.querySelectorAll(".notify-chip").forEach((chip) => {
-    const day = Number(chip.dataset.day);
-    chip.classList.toggle("active", notifySettings.days.includes(day));
-  });
+  const sortedRules = [...notifySettings.rules].sort((a, b) =>
+    a.day !== b.day ? a.day - b.day : a.time.localeCompare(b.time)
+  );
 
-  const sortedTimes = [...notifySettings.times].sort();
-  notifyTimeChips.innerHTML = sortedTimes
-    .map(
-      (t) => `
-        <span class="notify-time-chip" data-time="${t}">
-          ${t}
-          <button type="button" class="notify-time-remove-btn" data-time="${t}" aria-label="${t} 삭제">✕</button>
-        </span>`
-    )
-    .join("");
+  notifyRulesList.innerHTML = sortedRules.length
+    ? sortedRules
+        .map(
+          (r) => `
+        <div class="notify-rule-row">
+          <span>${ruleLabel(r)}</span>
+          <button type="button" class="notify-rule-remove-btn" data-day="${r.day}" data-time="${r.time}" aria-label="${ruleLabel(r)} 삭제">✕</button>
+        </div>`
+        )
+        .join("")
+    : `<p class="notify-rule-empty">등록된 알림이 없습니다. "+ 알림 추가"로 만들어주세요.</p>`;
 
   notifyStatus.textContent = "";
   notifyStatus.classList.remove("error", "success");
@@ -2744,40 +2823,59 @@ notifyEnabledSwitch.addEventListener("click", async () => {
   renderNotifySettings();
 });
 
-notifyDayChips.addEventListener("click", (e) => {
+// 규칙 삭제: 행마다 붙은 ✕ 버튼 (day+time으로 어떤 규칙인지 식별)
+notifyRulesList.addEventListener("click", (e) => {
+  const btn = e.target.closest(".notify-rule-remove-btn");
+  if (!btn) return;
+  const day = Number(btn.dataset.day);
+  const time = btn.dataset.time;
+  notifySettings.rules = notifySettings.rules.filter((r) => !(r.day === day && r.time === time));
+  saveNotifySettingsToStorage();
+  renderNotifySettings();
+});
+
+// 알림 추가 모달: 시점(하루 전/당일 중 하나, 기본 선택되어 있어 미완성
+// 상태 자체가 불가능함) + 시각을 골라 "완료"를 누르면 규칙 1건이 추가된다.
+function openAddRuleModal() {
+  addRuleStatus.textContent = "";
+  addRuleDayChips.querySelectorAll(".notify-chip").forEach((chip, i) => {
+    chip.classList.toggle("active", i === 0);
+  });
+  addRuleHourSelect.value = "09";
+  addRuleMinuteSelect.value = "00";
+  addNotifyRuleBackdrop.classList.add("open");
+}
+
+function closeAddRuleModal() {
+  addNotifyRuleBackdrop.classList.remove("open");
+}
+
+notifyAddRuleBtn.addEventListener("click", openAddRuleModal);
+addNotifyRuleCancelBtn.addEventListener("click", closeAddRuleModal);
+addNotifyRuleBackdrop.addEventListener("click", (e) => {
+  if (e.target === addNotifyRuleBackdrop) closeAddRuleModal();
+});
+
+addRuleDayChips.addEventListener("click", (e) => {
   const chip = e.target.closest(".notify-chip");
   if (!chip) return;
-  const day = Number(chip.dataset.day);
-  const idx = notifySettings.days.indexOf(day);
-  if (idx >= 0) {
-    notifySettings.days.splice(idx, 1);
-  } else {
-    notifySettings.days.push(day);
-  }
-  saveNotifySettingsToStorage();
-  renderNotifySettings();
+  addRuleDayChips.querySelectorAll(".notify-chip").forEach((c) => c.classList.toggle("active", c === chip));
 });
 
-notifyTimeAddBtn.addEventListener("click", () => {
-  notifyStatus.classList.remove("error", "success");
-  // 시/분 모두 <select>라 값 자체가 항상 유효한 15분 단위 조합이다.
-  const value = `${notifyHourSelect.value}:${notifyMinuteSelect.value}`;
-  if (notifySettings.times.includes(value)) {
-    notifyStatus.textContent = "이미 등록된 시각입니다.";
-    notifyStatus.classList.add("error");
+addNotifyRuleConfirmBtn.addEventListener("click", () => {
+  const dayChip = addRuleDayChips.querySelector(".notify-chip.active");
+  const day = Number(dayChip.dataset.day);
+  const time = `${addRuleHourSelect.value}:${addRuleMinuteSelect.value}`;
+
+  if (notifySettings.rules.some((r) => r.day === day && r.time === time)) {
+    addRuleStatus.textContent = "이미 등록된 알림입니다.";
     return;
   }
-  notifySettings.times.push(value);
-  saveNotifySettingsToStorage();
-  renderNotifySettings();
-});
 
-notifyTimeChips.addEventListener("click", (e) => {
-  const btn = e.target.closest(".notify-time-remove-btn");
-  if (!btn) return;
-  notifySettings.times = notifySettings.times.filter((t) => t !== btn.dataset.time);
+  notifySettings.rules.push({ day, time });
   saveNotifySettingsToStorage();
   renderNotifySettings();
+  closeAddRuleModal();
 });
 
 notifyTestBtn.addEventListener("click", async () => {
