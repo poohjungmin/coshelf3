@@ -2783,17 +2783,33 @@ cloudSyncLoginBtn.addEventListener("click", async () => {
     return;
   }
   cloudSyncStatus.classList.remove("error", "success");
-  cloudSyncStatus.textContent = "Google 로그인으로 이동합니다...";
+  cloudSyncStatus.textContent = "Google 로그인 중...";
+  const { auth, googleProvider, linkWithPopup, signInWithCredential, GoogleAuthProvider } =
+    window.coshelfFirebase;
   try {
-    const { auth, googleProvider, linkWithRedirect } = window.coshelfFirebase;
     // 새 uid로 로그인하는 게 아니라, 지금 이 기기의 익명 uid를 Google 계정에
     // "링크"한다 - 그래야 기존 devices/{uid} 알림 설정이 그대로 유지된다.
-    await linkWithRedirect(auth.currentUser, googleProvider);
-    // 성공하면 리다이렉트로 페이지를 벗어나므로 이후 코드는 보통 실행되지 않는다.
+    // (authDomain이 실제 서빙 도메인과 달라 linkWithRedirect는 iOS Safari
+    // 홈 화면 PWA에서 결과를 못 받아오는 문제가 있어 팝업 방식을 쓴다.)
+    await linkWithPopup(auth.currentUser, googleProvider);
+    // 성공하면 onAuthStateChanged가 발동되어 "coshelf-auth-changed" 이벤트로
+    // 화면 갱신/동기화가 자동으로 이어진다.
   } catch (e) {
-    console.error("[클라우드 백업] 로그인 시작 실패:", e);
-    cloudSyncStatus.textContent = "로그인을 시작하지 못했습니다. 잠시 후 다시 시도해주세요.";
-    cloudSyncStatus.classList.add("error");
+    if (e && e.code === "auth/credential-already-in-use") {
+      // 이 Google 계정이 이미 다른 uid에 연결되어 있음 - 그 계정으로 전환한다.
+      try {
+        const credential = GoogleAuthProvider.credentialFromError(e);
+        await signInWithCredential(auth, credential);
+      } catch (e2) {
+        console.error("[클라우드 백업] 기존 계정으로 전환 실패:", e2);
+        cloudSyncStatus.textContent = "로그인에 실패했습니다. 다시 시도해주세요.";
+        cloudSyncStatus.classList.add("error");
+      }
+    } else {
+      console.error("[클라우드 백업] 로그인 실패:", e);
+      cloudSyncStatus.textContent = "로그인에 실패했습니다. 잠시 후 다시 시도해주세요.";
+      cloudSyncStatus.classList.add("error");
+    }
   }
 });
 
@@ -2859,14 +2875,11 @@ async function syncWithCloud() {
   }
 }
 
-// 리다이렉트로 Google 로그인을 마치고 돌아왔을 때 처리한다.
-// 실제 로그인 완료 감지 + 동기화 트리거는 "coshelf-auth-changed" 이벤트
+// 로그인 완료 감지 + 동기화 트리거는 "coshelf-auth-changed" 이벤트
 // (onAuthStateChanged 기반, index.html 하단 모듈 스크립트에서 발생시킴)로
-// 처리한다 - getRedirectResult()만으로는 iOS Safari PWA에서 리다이렉트
-// 직후에도 null이 반환되는 알려진 문제가 있어서 신뢰하지 않는다.
-// 이 리스너는 익명 상태를 포함해 인증 상태가 바뀔 때마다 항상 불리므로,
-// (a) 방금 로그인이 막 완료된 경우, (b) 이미 로그인된 채로 앱을 다시 연
-// 경우를 모두 같은 경로로 처리한다.
+// 처리한다. 이 리스너는 익명 상태를 포함해 인증 상태가 바뀔 때마다 항상
+// 불리므로, (a) 방금 로그인이 막 완료된 경우, (b) 이미 로그인된 채로 앱을
+// 다시 연 경우를 모두 같은 경로로 처리한다.
 let cloudSyncedThisSession = false;
 window.addEventListener("coshelf-auth-changed", async () => {
   renderCloudSyncUI();
@@ -2878,42 +2891,6 @@ window.addEventListener("coshelf-auth-changed", async () => {
     await syncWithCloud();
   }
 });
-
-// getRedirectResult()는 위 이벤트만으로는 알 수 없는 "이미 다른 uid에
-// 연결된 Google 계정으로 로그인 시도"(auth/credential-already-in-use)
-// 오류를 잡아내기 위해서만 사용한다. 성공 시 화면 전환(설정 화면으로
-// 돌아가기)도 여기서 담당한다 - 실제 동기화는 위 이벤트 리스너가 한다.
-(async function handleAuthRedirectReturn() {
-  if (!window.coshelfFirebase) {
-    await new Promise((resolve) => {
-      const check = () => (window.coshelfFirebase ? resolve() : setTimeout(check, 100));
-      check();
-    });
-  }
-  const { auth, getRedirectResult, GoogleAuthProvider, signInWithCredential } = window.coshelfFirebase;
-
-  try {
-    const result = await getRedirectResult(auth);
-    if (!result || !result.user) return; // 리다이렉트로 돌아온 게 아니면 아무것도 안 함
-    showScreen("screen-settings");
-  } catch (e) {
-    if (e && e.code === "auth/credential-already-in-use") {
-      // 이 Google 계정이 이미 다른 uid에 연결되어 있음 - 그 계정으로 전환한다.
-      try {
-        const credential = GoogleAuthProvider.credentialFromError(e);
-        await signInWithCredential(auth, credential);
-        showScreen("screen-settings");
-      } catch (e2) {
-        console.error("[클라우드 백업] 기존 계정으로 전환 실패:", e2);
-        showScreen("screen-settings");
-        cloudSyncStatus.textContent = "로그인에 실패했습니다. 다시 시도해주세요.";
-        cloudSyncStatus.classList.add("error");
-      }
-    } else if (e) {
-      console.error("[클라우드 백업] 로그인 처리 실패:", e);
-    }
-  }
-})();
 
 function computeDday(expiryStr) {
   const today = new Date();
@@ -3248,10 +3225,11 @@ if ("serviceWorker" in navigator) {
      - Anonymous Auth는 로그인 화면 없이 기기별 내부 식별자(uid)를
        얻기 위한 용도이며, 평소에는 어떤 로그인 UI도 노출되지 않습니다.
      - 설정 화면에서 "☁️ 백업 및 기기 간 동기화"를 누르면, 이 익명 uid를
-       Google 계정으로 "링크"해서(linkWithRedirect) 새 uid로 바꾸지 않고
+       Google 계정으로 "링크"해서(linkWithPopup) 새 uid로 바꾸지 않고
        그대로 승격시킵니다 - 그래야 기존 devices/{uid} 알림 설정이
-       끊기지 않습니다. iOS 홈 화면 PWA(standalone)에서는 팝업 로그인이
-       불안정해서 리다이렉트 방식을 사용합니다.
+       끊기지 않습니다. linkWithRedirect는 authDomain이 실제 서빙 도메인과
+       달라 iOS Safari 홈 화면 PWA에서 로그인 결과를 못 받아오는 문제가
+       있어(Firebase의 알려진 이슈) 팝업 방식을 사용합니다.
      - 실제 알림 발송은 GitHub Actions 스케줄 워크플로가 담당합니다.
      ============================================================ -->
 <script type="module">
@@ -3261,10 +3239,8 @@ if ("serviceWorker" in navigator) {
     signInAnonymously,
     onAuthStateChanged,
     GoogleAuthProvider,
-    linkWithRedirect,
-    signInWithRedirect,
+    linkWithPopup,
     signInWithCredential,
-    getRedirectResult,
   } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
   import {
     getFirestore,
@@ -3304,9 +3280,7 @@ if ("serviceWorker" in navigator) {
   onAuthStateChanged(auth, (user) => {
     if (user) {
       resolveUid(user.uid);
-      // getRedirectResult()는 iOS Safari의 PWA(홈 화면 설치) 컨텍스트에서
-      // 리다이렉트 직후에도 null을 반환하는 경우가 알려진 문제라, 로그인
-      // 완료를 감지하는 진짜 기준은 이 콜백(실제 인증 상태 변화)으로 삼는다.
+      // 로그인 완료를 감지하는 기준은 이 콜백(실제 인증 상태 변화)이다.
       // 앱을 다시 열었을 때 이미 로그인돼 있는 경우도 여기서 함께 잡힌다.
       window.dispatchEvent(
         new CustomEvent("coshelf-auth-changed", {
@@ -3337,10 +3311,8 @@ if ("serviceWorker" in navigator) {
     collection,
     writeBatch,
     serverTimestamp,
-    linkWithRedirect,
-    signInWithRedirect,
+    linkWithPopup,
     signInWithCredential,
-    getRedirectResult,
     GoogleAuthProvider,
   };
 </script>
