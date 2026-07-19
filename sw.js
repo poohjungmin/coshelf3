@@ -1,11 +1,83 @@
 // Coshelf service worker
+//
+// 캐싱 전략 (별도 js/css 파일이 없는 단일 파일 앱이라 단순하게 유지):
+// - index.html(네비게이션 요청)은 항상 네트워크를 먼저 시도한다(network-first).
+//   GitHub Pages 새 배포가 홈 화면 앱 재실행 시 곧바로 반영되도록 하기 위함.
+//   오프라인일 때만 캐시로 폴백한다.
+// - 아이콘/매니페스트 같은 정적 자산은 cache-first로 서빙한다(자주 안 바뀜).
+// - 그 외 cross-origin 요청(Gemini API, Firebase/gstatic CDN 등)은 손대지 않는다.
 
-self.addEventListener("install", () => {
+const CACHE_VERSION = "v1";
+const CACHE_NAME = `coshelf-${CACHE_VERSION}`;
+const PRECACHE_ASSETS = ["./", "icon.png", "icon-512.png", "manifest.json"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_ASSETS))
+      .catch((e) => console.error("[ServiceWorker] 사전 캐싱 실패:", e))
+  );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+async function networkFirst(request) {
+  try {
+    const fresh = await fetch(request, { cache: "no-store" });
+    const cache = await caches.open(CACHE_NAME);
+    cache.put(request, fresh.clone());
+    return fresh;
+  } catch (e) {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    throw e;
+  }
+}
+
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+  const fresh = await fetch(request);
+  const cache = await caches.open(CACHE_NAME);
+  cache.put(request, fresh.clone());
+  return fresh;
+}
+
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  const url = new URL(req.url);
+
+  // POST(Gemini API 등) 또는 cross-origin(Firebase/gstatic CDN 등) 요청은
+  // 우리가 관여하지 않고 브라우저 기본 동작에 맡긴다.
+  if (req.method !== "GET" || url.origin !== self.location.origin) {
+    return;
+  }
+
+  const isNavigation = req.mode === "navigate" || url.pathname.endsWith("/index.html");
+  if (isNavigation) {
+    event.respondWith(networkFirst(req));
+    return;
+  }
+
+  const isPrecachedAsset = PRECACHE_ASSETS.some(
+    (asset) => asset !== "./" && url.pathname.endsWith(asset)
+  );
+  if (isPrecachedAsset) {
+    event.respondWith(cacheFirst(req));
+    return;
+  }
+  // 그 외(sw.js 자체 요청 등)는 기본 동작.
 });
 
 // GitHub Actions 스케줄 워크플로가 보낸 push 메시지를 화면에 표시한다.
