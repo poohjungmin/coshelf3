@@ -2918,8 +2918,11 @@ notifyTestBtn.addEventListener("click", async () => {
 /* =========================================================================
    1-7. 설정 화면 - 클라우드 백업/동기화 (Google 로그인)
    - 평소에는 로그인 없이 로컬(localStorage)만 사용한다. 이 버튼을 눌러야만
-     Google 로그인이 시작된다. 실제 마이그레이션/동기화 로직은 이후 단계에서
-     연결한다 - 지금은 로그인 흐름과 상태 표시만 붙인다.
+     Google 로그인이 시작된다.
+   - 로그인(링크) 완료 후: users/{uid} 문서가 없으면(그 계정 첫 백업) 로컬
+     데이터를 그대로 업로드하고, 있으면(다른 기기 등에서 이미 백업된 계정)
+     클라우드 데이터와 id 기준으로 합쳐서(클라우드 우선, 로컬에만 있던
+     항목은 업로드) 데이터 유실 없이 병합한다.
    ========================================================================= */
 function renderCloudSyncUI() {
   if (!window.coshelfFirebase) return;
@@ -2953,6 +2956,107 @@ cloudSyncLoginBtn.addEventListener("click", async () => {
     cloudSyncStatus.classList.add("error");
   }
 });
+
+// 로그인 성공 시(리다이렉트 복귀 시점, 또는 이미 로그인된 상태로 앱을 다시
+// 열었을 때) 클라우드와 동기화한다. id 기준으로 합쳐서 데이터를 잃지 않는다.
+async function syncWithCloud() {
+  if (!window.coshelfFirebase) return;
+  const { db, auth, doc, getDoc, getDocs, collection, writeBatch, serverTimestamp } =
+    window.coshelfFirebase;
+  const uid = auth.currentUser.uid;
+
+  cloudSyncStatus.classList.remove("error", "success");
+  cloudSyncStatus.textContent = "동기화 중...";
+
+  try {
+    const userDocRef = doc(db, "users", uid);
+    const userDocSnap = await getDoc(userDocRef);
+
+    let mergedProducts = products;
+    let mergedThresholds = { red: RED_THRESHOLD_DAYS, yellow: YELLOW_THRESHOLD_DAYS };
+
+    if (userDocSnap.exists()) {
+      // 이미 백업된 계정 - 클라우드 데이터를 받아와 id 기준으로 합친다.
+      // 양쪽에 다 있는 id는 클라우드 값을 쓰고, 로컬에만 있던 항목은 그대로 유지(합집합).
+      const cloudProductsSnap = await getDocs(collection(db, "users", uid, "products"));
+      const cloudProductMap = new Map();
+      cloudProductsSnap.forEach((d) => cloudProductMap.set(d.id, d.data()));
+      const localOnly = products.filter((p) => !cloudProductMap.has(p.id));
+      mergedProducts = [...cloudProductMap.values(), ...localOnly];
+
+      const cloudData = userDocSnap.data();
+      if (cloudData && cloudData.thresholds) {
+        mergedThresholds = cloudData.thresholds;
+      }
+    }
+
+    // 병합 결과를 로컬 상태/저장소에 반영
+    products = mergedProducts;
+    saveProductsToStorage();
+    RED_THRESHOLD_DAYS = mergedThresholds.red;
+    YELLOW_THRESHOLD_DAYS = mergedThresholds.yellow;
+    saveThresholdsToStorage();
+
+    // 병합 결과(로컬에만 있던 항목 포함)를 다시 클라우드에 반영해서
+    // 어느 기기에서 다시 로그인해도 항상 최신 합집합을 받아가도록 한다.
+    const batch = writeBatch(db);
+    mergedProducts.forEach((p) => {
+      batch.set(doc(db, "users", uid, "products", p.id), { ...p, updatedAt: serverTimestamp() });
+    });
+    batch.set(userDocRef, { thresholds: mergedThresholds, updatedAt: serverTimestamp() }, { merge: true });
+    await batch.commit();
+
+    renderHome();
+    renderList();
+    renderCloudSyncUI();
+    cloudSyncLastSynced.textContent = new Date().toLocaleString("ko-KR");
+    cloudSyncStatus.textContent = "동기화가 완료되었습니다.";
+    cloudSyncStatus.classList.add("success");
+  } catch (e) {
+    console.error("[클라우드 백업] 동기화 실패:", e);
+    cloudSyncStatus.textContent = "동기화에 실패했습니다. 잠시 후 다시 시도해주세요.";
+    cloudSyncStatus.classList.add("error");
+  }
+}
+
+// 리다이렉트로 Google 로그인을 마치고 돌아왔을 때 처리한다.
+(async function handleAuthRedirectReturn() {
+  if (!window.coshelfFirebase) {
+    await new Promise((resolve) => {
+      const check = () => (window.coshelfFirebase ? resolve() : setTimeout(check, 100));
+      check();
+    });
+  }
+  const { auth, getRedirectResult, GoogleAuthProvider, signInWithCredential } = window.coshelfFirebase;
+
+  try {
+    const result = await getRedirectResult(auth);
+    if (!result || !result.user) return; // 리다이렉트로 돌아온 게 아니면 아무것도 안 함
+
+    showScreen("screen-settings");
+    await syncWithCloud();
+  } catch (e) {
+    if (e && e.code === "auth/credential-already-in-use") {
+      // 이 Google 계정이 이미 다른 uid에 연결되어 있음 - 그 계정으로 전환한다.
+      try {
+        const credential = GoogleAuthProvider.credentialFromError(e);
+        await signInWithCredential(auth, credential);
+        showScreen("screen-settings");
+        await syncWithCloud();
+      } catch (e2) {
+        console.error("[클라우드 백업] 기존 계정으로 전환 실패:", e2);
+        showScreen("screen-settings");
+        cloudSyncStatus.textContent = "로그인에 실패했습니다. 다시 시도해주세요.";
+        cloudSyncStatus.classList.add("error");
+      }
+    } else if (e) {
+      console.error("[클라우드 백업] 로그인 처리 실패:", e);
+      showScreen("screen-settings");
+      cloudSyncStatus.textContent = "로그인에 실패했습니다. 다시 시도해주세요.";
+      cloudSyncStatus.classList.add("error");
+    }
+  }
+})();
 
 function computeDday(expiryStr) {
   const today = new Date();
