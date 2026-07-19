@@ -2792,8 +2792,11 @@ cloudSyncLoginBtn.addEventListener("click", async () => {
     // (authDomain이 실제 서빙 도메인과 달라 linkWithRedirect는 iOS Safari
     // 홈 화면 PWA에서 결과를 못 받아오는 문제가 있어 팝업 방식을 쓴다.)
     await linkWithPopup(auth.currentUser, googleProvider);
-    // 성공하면 onAuthStateChanged가 발동되어 "coshelf-auth-changed" 이벤트로
-    // 화면 갱신/동기화가 자동으로 이어진다.
+    // "Google 로그인 중..." 문구가 계속 남아 헷갈리지 않도록 여기서 바로
+    // 갱신한다. 실제 동기화는 곧이어 onAuthStateChanged가 발동시키는
+    // "coshelf-auth-changed" 이벤트가 이어받아 진행하고 "완료"로 덮어쓴다.
+    cloudSyncStatus.textContent = "로그인되었습니다. 동기화 중...";
+    cloudSyncStatus.classList.remove("error");
   } catch (e) {
     if (e && e.code === "auth/credential-already-in-use") {
       // 이 Google 계정이 이미 다른 uid에 연결되어 있음 - 그 계정으로 전환한다.
