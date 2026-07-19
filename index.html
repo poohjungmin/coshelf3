@@ -2868,9 +2868,12 @@ async function syncWithCloud() {
 // (a) 방금 로그인이 막 완료된 경우, (b) 이미 로그인된 채로 앱을 다시 연
 // 경우를 모두 같은 경로로 처리한다.
 let cloudSyncedThisSession = false;
-window.addEventListener("coshelf-auth-changed", async (e) => {
+window.addEventListener("coshelf-auth-changed", async () => {
   renderCloudSyncUI();
-  if (!e.detail.isAnonymous && !cloudSyncedThisSession) {
+  // 이벤트에 실려온 값이 아니라, 그 시점의 실제 인증 상태를 다시 읽어서
+  // 판단한다(이벤트 payload와 실제 상태가 어긋날 여지를 원천 차단).
+  const user = window.coshelfFirebase.auth.currentUser;
+  if (user && !user.isAnonymous && !cloudSyncedThisSession) {
     cloudSyncedThisSession = true;
     await syncWithCloud();
   }
