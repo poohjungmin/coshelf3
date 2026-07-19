@@ -2162,13 +2162,12 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
       // 모델 출력이 항상 유효한 JSON 객체가 되도록 강제
       responseMimeType: "application/json",
       temperature: 0, // 추측/창작을 줄이고 일관된 답변을 얻기 위해 0으로 설정
-      // gemini-3.5-flash는 기본적으로 "생각(thinking)" 토큰을 쓰는데, 이 토큰이
-      // maxOutputTokens 예산을 함께 소모해서 실제 JSON 응답이 잘리는 문제가 있었다.
-      // thinkingLevel을 minimal로 낮춰도 완전히 사라지지는 않는 것으로 보여,
-      // 실제 JSON 출력 자체는 아주 짧다는 점을 고려해 한도를 넉넉히 잡는다
-      // (정상 응답 시에는 모델이 다 쓰고 나면 멈추므로 속도에 영향 없음).
+      // 실측 결과 thinkingLevel: "minimal"은 토큰을 아끼긴 하지만, JSON 구조를
+      // 끝까지 닫기 전에 모델이 finishReason: STOP으로 조기 종료해버려 응답이
+      // 깨지는 원인이었다(디버그 로그: candidatesTokenCount 36개뿐, thinking
+      // 토큰은 0개). 정확도가 우선이므로 thinking 제한을 제거하고 모델
+      // 기본값을 사용한다.
       maxOutputTokens: 3072,
-      thinkingConfig: { thinkingLevel: "minimal" },
     },
   };
 
@@ -2276,15 +2275,8 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
     // 화면(기존 statusText 영역)에도 원문 응답 일부를 보여줘서
     // 어떤 응답 때문에 실패했는지 바로 확인할 수 있도록 함
     const snippet = content.slice(0, 120).replace(/\s+/g, " ").trim();
-    // 원인 파악용 임시 디버그 정보 (finishReason/토큰 사용량) - 콘솔을 볼 수
-    // 없는 환경(iOS PWA 등)에서도 화면에서 바로 확인할 수 있도록 노출한다.
-    const debugInfo = {
-      finishReason: data.candidates?.[0]?.finishReason,
-      usage: data.usageMetadata,
-    };
     throw new Error(
-      `모델 응답을 JSON으로 해석할 수 없습니다. (원문 일부: "${snippet}${content.length > 120 ? "..." : ""}") ` +
-        `[디버그: ${JSON.stringify(debugInfo)}]`
+      `모델 응답을 JSON으로 해석할 수 없습니다. (원문 일부: "${snippet}${content.length > 120 ? "..." : ""}")`
     );
   }
 
