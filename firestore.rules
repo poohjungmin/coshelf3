@@ -5,5 +5,16 @@ service cloud.firestore {
     match /devices/{deviceId} {
       allow read, write: if request.auth != null && request.auth.uid == deviceId;
     }
+
+    // 클라우드 백업(로그인 시): 신호등 기준 등 설정 문서 + 제품별 서브컬렉션.
+    // 익명 인증을 Google 계정으로 링크해도 uid가 그대로 유지되므로,
+    // devices/{uid}와 동일하게 본인 uid 문서만 읽기/쓰기 가능하도록 한다.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /products/{productId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
   }
 }
