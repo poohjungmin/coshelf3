@@ -3203,12 +3203,17 @@ if ("serviceWorker" in navigator) {
 </script>
 
 <!-- ============================================================
-     Firebase (알림 기능용)
+     Firebase (알림 기능 + 클라우드 백업)
      - Firestore는 기기(익명 인증 uid)별 알림 구독정보/설정/제품
-       유효기한 요약을 저장하는 용도로만 사용합니다.
+       유효기한 요약을 저장하는 용도(devices/{uid})와, 로그인한
+       사용자의 데이터 백업(users/{uid})에 사용합니다.
      - Anonymous Auth는 로그인 화면 없이 기기별 내부 식별자(uid)를
-       얻기 위한 용도이며, 사용자에게는 어떤 로그인 UI도 노출되지
-       않습니다.
+       얻기 위한 용도이며, 평소에는 어떤 로그인 UI도 노출되지 않습니다.
+     - 설정 화면에서 "☁️ 백업 및 기기 간 동기화"를 누르면, 이 익명 uid를
+       Google 계정으로 "링크"해서(linkWithRedirect) 새 uid로 바꾸지 않고
+       그대로 승격시킵니다 - 그래야 기존 devices/{uid} 알림 설정이
+       끊기지 않습니다. iOS 홈 화면 PWA(standalone)에서는 팝업 로그인이
+       불안정해서 리다이렉트 방식을 사용합니다.
      - 실제 알림 발송은 GitHub Actions 스케줄 워크플로가 담당합니다.
      ============================================================ -->
 <script type="module">
@@ -3217,11 +3222,21 @@ if ("serviceWorker" in navigator) {
     getAuth,
     signInAnonymously,
     onAuthStateChanged,
+    GoogleAuthProvider,
+    linkWithRedirect,
+    signInWithRedirect,
+    signInWithCredential,
+    getRedirectResult,
   } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
   import {
     getFirestore,
     doc,
     setDoc,
+    getDoc,
+    getDocs,
+    deleteDoc,
+    collection,
+    writeBatch,
     serverTimestamp,
   } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
@@ -3237,23 +3252,50 @@ if ("serviceWorker" in navigator) {
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
+  const googleProvider = new GoogleAuthProvider();
 
-  const uidReady = new Promise((resolve, reject) => {
-    onAuthStateChanged(auth, (user) => {
-      if (user) resolve(user.uid);
-    });
-    signInAnonymously(auth).catch((e) => {
-      console.error("[Firebase] 익명 로그인 실패:", e);
-      reject(e);
-    });
+  // onAuthStateChanged가 기존 세션(익명이든, 이미 Google로 링크됐든)을 먼저
+  // 알려주면 그걸 그대로 쓰고, 세션이 아예 없을 때만 새로 익명 로그인한다.
+  // 이렇게 해야 이미 백업을 켠 사용자가 재실행했을 때 Google 연동 상태가
+  // 유지된다(무조건 signInAnonymously를 호출하면 안 됨).
+  let resolveUid;
+  const uidReady = new Promise((resolve) => {
+    resolveUid = resolve;
   });
 
-  uidReady
-    .then((uid) => console.log("[Firebase] 익명 인증 uid 준비됨:", uid))
-    .catch(() => {});
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      resolveUid(user.uid);
+    } else {
+      signInAnonymously(auth).catch((e) => {
+        console.error("[Firebase] 익명 로그인 실패:", e);
+      });
+    }
+  });
 
-  // 알림 기능에서 사용할 수 있도록 전역에 노출
-  window.coshelfFirebase = { app, auth, db, uidReady, doc, setDoc, serverTimestamp };
+  uidReady.then((uid) => console.log("[Firebase] uid 준비됨:", uid));
+
+  // 알림 기능 + 백업 기능에서 사용할 수 있도록 전역에 노출
+  window.coshelfFirebase = {
+    app,
+    auth,
+    db,
+    uidReady,
+    googleProvider,
+    doc,
+    setDoc,
+    getDoc,
+    getDocs,
+    deleteDoc,
+    collection,
+    writeBatch,
+    serverTimestamp,
+    linkWithRedirect,
+    signInWithRedirect,
+    signInWithCredential,
+    getRedirectResult,
+    GoogleAuthProvider,
+  };
 </script>
 </body>
 </html>
