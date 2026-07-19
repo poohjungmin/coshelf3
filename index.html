@@ -1030,7 +1030,7 @@
     align-items: center;
     margin-top: 10px;
   }
-  .notify-time-add-row input[type="time"] {
+  .notify-time-select {
     flex: 1;
     padding: 8px 10px;
     border-radius: var(--radius-sm);
@@ -1038,6 +1038,13 @@
     font-family: inherit;
     font-size: 14px;
     box-sizing: border-box;
+    background: var(--bg);
+    color: var(--text-primary);
+  }
+  .notify-time-colon {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-secondary);
   }
 </style>
 </head>
@@ -1216,7 +1223,9 @@
           <span class="threshold-label">알림 시각 (여러 개 등록 가능)</span>
           <div class="notify-chip-group" id="notifyTimeChips"></div>
           <div class="notify-time-add-row">
-            <input type="time" id="notifyTimeInput" value="09:00" step="900" />
+            <select id="notifyHourSelect" class="notify-time-select" aria-label="시"></select>
+            <span class="notify-time-colon">:</span>
+            <select id="notifyMinuteSelect" class="notify-time-select" aria-label="분"></select>
             <button type="button" class="btn btn-secondary" id="notifyTimeAddBtn" style="width: auto; padding: 10px 16px;">추가</button>
           </div>
           <p class="list-sort-note" style="margin: 8px 4px 0; text-align: left;">
@@ -1454,7 +1463,8 @@ const notifyEnabledSwitch = document.getElementById("notifyEnabledSwitch");
 const notifyDetailFields = document.getElementById("notifyDetailFields");
 const notifyDayChips = document.getElementById("notifyDayChips");
 const notifyTimeChips = document.getElementById("notifyTimeChips");
-const notifyTimeInput = document.getElementById("notifyTimeInput");
+const notifyHourSelect = document.getElementById("notifyHourSelect");
+const notifyMinuteSelect = document.getElementById("notifyMinuteSelect");
 const notifyTimeAddBtn = document.getElementById("notifyTimeAddBtn");
 const notifyTestBtn = document.getElementById("notifyTestBtn");
 const notifyStatus = document.getElementById("notifyStatus");
@@ -2722,6 +2732,26 @@ function saveNotifySettingsToStorage() {
   syncNotifyStateToFirestore();
 }
 
+// 시/분 <select> 옵션을 채운다. 분은 00/15/30/45만 존재해서 애초에
+// 15분 단위가 아닌 값을 고를 수 없다.
+function populateNotifyTimeSelects() {
+  for (let h = 0; h < 24; h++) {
+    const opt = document.createElement("option");
+    opt.value = String(h).padStart(2, "0");
+    opt.textContent = `${String(h).padStart(2, "0")}시`;
+    notifyHourSelect.appendChild(opt);
+  }
+  ["00", "15", "30", "45"].forEach((m) => {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = `${m}분`;
+    notifyMinuteSelect.appendChild(opt);
+  });
+  notifyHourSelect.value = "09";
+  notifyMinuteSelect.value = "00";
+}
+populateNotifyTimeSelects();
+
 loadNotifySettingsFromStorage();
 
 function renderNotifySettings() {
@@ -2797,16 +2827,9 @@ notifyDayChips.addEventListener("click", (e) => {
 });
 
 notifyTimeAddBtn.addEventListener("click", () => {
-  const rawValue = notifyTimeInput.value;
   notifyStatus.classList.remove("error", "success");
-  if (!isValidTimeString(rawValue)) {
-    notifyStatus.textContent = "올바른 시각을 선택해주세요.";
-    notifyStatus.classList.add("error");
-    return;
-  }
-  // <input step="900">로 15분 단위만 고르도록 해뒀지만, 일부 브라우저는
-  // 수동 입력 시 이를 강제하지 않을 수 있어 방어적으로 한 번 더 보정한다.
-  const value = roundTimeToQuarterHour(rawValue);
+  // 시/분 모두 <select>라 값 자체가 항상 유효한 15분 단위 조합이다.
+  const value = `${notifyHourSelect.value}:${notifyMinuteSelect.value}`;
   if (notifySettings.times.includes(value)) {
     notifyStatus.textContent = "이미 등록된 시각입니다.";
     notifyStatus.classList.add("error");
