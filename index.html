@@ -255,6 +255,14 @@
   }
   .result-field input.is-null::placeholder { color: var(--danger); }
 
+  /* 달력(type="date") 모드일 때 iOS가 기본으로 가운데 정렬해버려서
+     다른 입력칸(왼쪽 정렬 텍스트)과 시각적으로 어긋나 보이는 문제를 고친다.
+     폭은 다른 입력칸과 동일(width:100%, box-sizing:border-box)하게 유지하고
+     텍스트만 오른쪽 정렬한다. */
+  .result-field input[type="date"] {
+    text-align: right;
+  }
+
   /* ---------------- 상태 표시 ---------------- */
   .status {
     font-size: 13px;
@@ -342,7 +350,10 @@
     border-radius: var(--radius-lg);
     padding: 14px;
     box-shadow: var(--shadow);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
+  .home-card:active { opacity: 0.7; }
 
   .home-card .status-dot { font-size: 18px; line-height: 1; }
 
@@ -1392,6 +1403,7 @@
       <p class="status" id="thresholdStatus"></p>
     </section>
     <p class="list-sort-note">
+      ⚫ 이미 사용기한이 지난 제품<br />
       🔴 사용기한이 임박한 제품<br />
       🟡 미리 준비하면 좋은 제품<br />
       🟢 아직 여유가 있는 제품
@@ -3460,6 +3472,12 @@ const homeHero = document.getElementById("homeHero");
 const homeList = document.getElementById("homeList");
 const homeEmpty = document.getElementById("homeEmpty");
 
+// 홈 화면 카드를 누르면(목록 화면과 동일하게) 바로 수정 화면으로 이동한다.
+homeList.addEventListener("click", (e) => {
+  const card = e.target.closest(".home-card");
+  if (card) openEditProduct(Number(card.dataset.id));
+});
+
 function renderHome() {
   const withDday = products.map((p) => ({ ...p, dday: computeDday(p.expiryDate) }));
 
@@ -3473,7 +3491,7 @@ function renderHome() {
     .sort((a, b) => a.dday.days - b.dday.days);
 
   const homeCardHtml = (p) => `
-    <div class="home-card">
+    <div class="home-card" data-id="${p.id}">
       <span class="status-dot">${statusEmoji(p.dday.status)}</span>
       <div class="thumb">${
         p.imageDataUrl
