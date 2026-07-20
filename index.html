@@ -3346,8 +3346,11 @@ async function syncProductToCloud(product) {
       ...product,
       updatedAt: serverTimestamp(),
     });
+    console.log("[클라우드 백업] 제품 동기화 성공:", product.id, product.product);
+    showToast("클라우드에 저장되었습니다.", "success");
   } catch (e) {
-    console.error("[클라우드 백업] 제품 동기화 실패:", e);
+    console.error("[클라우드 백업] 제품 동기화 실패:", product.id, e);
+    showToast("동기화 실패. 네트워크를 확인해주세요.", "error");
   }
 }
 
@@ -3357,8 +3360,11 @@ async function deleteProductFromCloud(id) {
   const { db, auth, doc, deleteDoc } = window.coshelfFirebase;
   try {
     await deleteDoc(doc(db, "users", auth.currentUser.uid, "products", String(id)));
+    console.log("[클라우드 백업] 제품 삭제 동기화 성공:", id);
+    showToast("클라우드에서도 삭제되었습니다.", "success");
   } catch (e) {
-    console.error("[클라우드 백업] 제품 삭제 동기화 실패:", e);
+    console.error("[클라우드 백업] 제품 삭제 동기화 실패:", id, e);
+    showToast("삭제 동기화 실패. 네트워크를 확인해주세요.", "error");
   }
 }
 
@@ -3375,8 +3381,11 @@ async function syncThresholdsToCloud() {
       },
       { merge: true }
     );
+    console.log("[클라우드 백업] 신호등 기준 동기화 성공:", RED_THRESHOLD_DAYS, YELLOW_THRESHOLD_DAYS);
+    showToast("클라우드에 저장되었습니다.", "success");
   } catch (e) {
     console.error("[클라우드 백업] 신호등 기준 동기화 실패:", e);
+    showToast("동기화 실패. 네트워크를 확인해주세요.", "error");
   }
 }
 
@@ -3390,8 +3399,11 @@ async function syncAppSettingsToCloud() {
       { appSettings: { ...appSettings }, updatedAt: serverTimestamp() },
       { merge: true }
     );
+    console.log("[클라우드 백업] 앱 설정 동기화 성공:", appSettings);
+    showToast("클라우드에 저장되었습니다.", "success");
   } catch (e) {
     console.error("[클라우드 백업] 앱 설정 동기화 실패:", e);
+    showToast("동기화 실패. 네트워크를 확인해주세요.", "error");
   }
 }
 
