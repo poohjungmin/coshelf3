@@ -325,28 +325,6 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .boot-sync-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 5000;
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-  }
-  .boot-sync-overlay .boot-sync-spinner {
-    width: 26px;
-    height: 26px;
-    border-width: 3px;
-    margin-right: 0;
-  }
-  .boot-sync-overlay p {
-    font-size: 13px;
-    color: var(--text-secondary);
-  }
-
   .key-warning {
     font-size: 12px;
     color: var(--danger);
@@ -1277,35 +1255,6 @@
 </head>
 <body>
 <div class="app">
-
-  <!-- 로컬에 저장된 제품이 하나도 없는 상태(최초 설치 등)에서, 예전에 구글
-       백업 로그인을 한 적이 있는 기기라면(coshelf_cloud_linked) 클라우드에
-       내려받을 데이터가 있을 수 있으므로 그 동기화가 끝날 때까지만 잠깐
-       가린다. 로컬에 제품이 하나라도 있으면(대부분의 재실행) 이 오버레이는
-       절대 뜨지 않고, 로컬 캐시를 즉시 그대로 보여준 뒤 동기화는 화면 뒤에서
-       조용히 진행되고 변경된 게 있을 때만 UI가 갱신된다. -->
-  <div class="boot-sync-overlay" id="bootSyncOverlay" style="display:none;">
-    <span class="spinner boot-sync-spinner"></span>
-    <p>최신 데이터를 불러오는 중...</p>
-  </div>
-  <script>
-    // 아래쪽 메인 스크립트가 로드되기 전, 파서가 여기 도달하는 즉시(동기)
-    // 실행되어야 화면 아래 콘텐츠가 그려지기 전에 오버레이로 가릴 수 있다.
-    (function () {
-      var linkedBefore = localStorage.getItem("coshelf_cloud_linked") === "1";
-      var hasLocalProducts = false;
-      try {
-        var raw = localStorage.getItem("coshelf_products");
-        var parsed = raw ? JSON.parse(raw) : [];
-        hasLocalProducts = Array.isArray(parsed) && parsed.length > 0;
-      } catch (e) {
-        hasLocalProducts = false;
-      }
-      if (linkedBefore && !hasLocalProducts) {
-        document.getElementById("bootSyncOverlay").style.display = "flex";
-      }
-    })();
-  </script>
 
   <header class="top">
     <button type="button" class="back-btn" id="registerBackBtn" aria-label="뒤로가기" style="display:none;">‹</button>
@@ -3389,17 +3338,10 @@ cloudSyncLoginBtn.addEventListener("click", async () => {
 
 // 로그인 성공 시(리다이렉트 복귀 시점, 또는 이미 로그인된 상태로 앱을 다시
 // 열었을 때) 클라우드와 동기화한다. id 기준으로 합쳐서 데이터를 잃지 않는다.
-// showLoading: true는 "로컬에 제품이 전혀 없는 상태(최초 설치 등)라서 boot
-// 오버레이가 떠 있고, 이걸 지울 책임이 이 호출에 있다"는 뜻이다. 그 외의
-// 모든 호출(백그라운드 복귀로 페이지가 다시 실행되는 경우 등)은 항상
-// showLoading:false로 불려야 하고, 이 함수는 그 경우 전체 화면 UI를
-// 절대 건드리지 않는다 - 화면은 로컬 데이터를 그대로 유지한 채로, 병합
-// 결과가 실제로 달라졌을 때만 조용히 다시 그려질 뿐이다.
-async function syncWithCloud({ showLoading = false } = {}) {
-  if (!window.coshelfFirebase) {
-    if (showLoading) hideBootSyncOverlay();
-    return;
-  }
+// 화면은 항상 로컬 데이터를 그대로 유지한 채로(전체 화면 로딩 UI 없음),
+// 병합 결과가 실제로 달라졌을 때만 조용히 다시 그려질 뿐이다.
+async function syncWithCloud() {
+  if (!window.coshelfFirebase) return;
   const { db, auth, doc, getDoc, getDocs, collection, writeBatch, serverTimestamp } =
     window.coshelfFirebase;
   const uid = auth.currentUser.uid;
@@ -3410,7 +3352,7 @@ async function syncWithCloud({ showLoading = false } = {}) {
   cloudSyncStatus.textContent = "동기화 중...";
   // 설정(백업) 화면이 아니라 홈/목록을 보고 있을 때도, 데이터가 아직 병합
   // 전이라는 걸 알 수 있도록 화면 어디서든 보이는 토스트도 함께 띄운다.
-  // (전체 화면을 가리는 게 아니라 작은 토스트라서 백그라운드 복귀 시에도 유지)
+  // (전체 화면을 가리는 게 아니라 작은 토스트라서 언제 떠도 화면을 안 가림)
   showToast("클라우드와 동기화하는 중...");
 
   try {
@@ -3488,8 +3430,6 @@ async function syncWithCloud({ showLoading = false } = {}) {
     cloudSyncStatus.textContent = "동기화에 실패했습니다. 잠시 후 다시 시도해주세요.";
     cloudSyncStatus.classList.add("error");
     showToast("동기화 실패. 네트워크를 확인해주세요.", "error");
-  } finally {
-    if (showLoading) hideBootSyncOverlay();
   }
 }
 
@@ -3586,26 +3526,12 @@ window.addEventListener("coshelf-auth-changed", async () => {
   // 이벤트에 실려온 값이 아니라, 그 시점의 실제 인증 상태를 다시 읽어서
   // 판단한다(이벤트 payload와 실제 상태가 어긋날 여지를 원천 차단).
   const user = window.coshelfFirebase.auth.currentUser;
-  if (user && !user.isAnonymous) {
-    // 다음에 로컬 데이터가 하나도 없는 상태로(최초 설치 등) 앱을 열었을 때는
-    // 이 값으로 "동기화해서 클라우드 데이터를 받아올 가능성이 있다"는 걸
-    // 판단해 로딩 오버레이를 잠깐 보여줄 수 있다(body 상단 인라인 스크립트).
-    localStorage.setItem(CLOUD_LINKED_KEY, "1");
-    if (!cloudSyncedThisSession) {
-      cloudSyncedThisSession = true;
-      // wasBootOverlayShown이 true인 딱 한 번(로컬 데이터가 없어서 최초
-      // 복원이 필요했던 경우)만 로딩을 표시한다. cloudSyncedThisSession
-      // 가드 덕분에 이후(백그라운드 복귀로 다시 실행돼도 새 세션이라
-      // 이 코드가 다시 여기까지 올 수는 있지만) 같은 세션 안에서는 이
-      // 분기에 두 번 들어오지 않으므로, 그 뒤로는 항상 조용한 동기화다.
-      await syncWithCloud({ showLoading: wasBootOverlayShown });
-    }
+  if (user && !user.isAnonymous && !cloudSyncedThisSession) {
+    cloudSyncedThisSession = true;
+    // 화면은 이미 로컬 데이터(또는 빈 상태)를 그대로 보여주고 있고, 이
+    // 동기화는 전체 화면을 절대 가리지 않고 뒤에서 조용히 진행된다.
+    await syncWithCloud();
   }
-  // 오버레이를 "켜는" 곳은 body 상단 인라인 스크립트 단 하나뿐이다. 여기서는
-  // 그게 켜져 있을 수 있는 유일한 정상 경로(최초 복원)를 마무리하는
-  // 의미로 한 번 더 지운다 - 이미 안 떠 있었다면 안전한 no-op이다.
-  initialCloudRestoreInProgress = false;
-  hideBootSyncOverlay();
 });
 
 function computeDday(expiryStr) {
@@ -3927,40 +3853,6 @@ function escapeHtml(str) {
 /* =========================================================================
    9. 초기화
    ========================================================================= */
-const CLOUD_LINKED_KEY = "coshelf_cloud_linked";
-const bootSyncOverlay = document.getElementById("bootSyncOverlay");
-// 오버레이를 "켜는" 곳은 body 상단의 인라인 스크립트 단 하나뿐이다(로컬에
-// 제품이 하나도 없는 최초 설치 상황일 때만 display:flex로 켜 둔다). 이
-// 시점에 그 스타일을 읽어서 "이번 실행이 최초 복원 상황인지"를 한 번만
-// 판단해두면, 로컬 데이터가 있던 실행에서는 이 값이 항상 false이므로
-// 이후 어떤 이벤트가 와도 오버레이가 다시 켜질 일이 없다.
-const wasBootOverlayShown = bootSyncOverlay.style.display !== "none";
-let initialCloudRestoreInProgress = wasBootOverlayShown;
-function hideBootSyncOverlay() {
-  bootSyncOverlay.style.display = "none";
-}
-// 오프라인이거나 Firebase 로드 자체가 막힌 경우(광고 차단기 등) 오버레이가
-// 영원히 안 사라지는 것을 막는 안전장치. 정상 상황에서는 그 전에
-// coshelf-auth-changed 처리가 먼저 오버레이를 지운다.
-setTimeout(() => {
-  initialCloudRestoreInProgress = false;
-  hideBootSyncOverlay();
-}, 5000);
-
-// 방어적 안전장치: visibilitychange/pageshow/focus는 앱이 백그라운드에서
-// 돌아올 때(또는 iOS가 메모리 확보를 위해 페이지를 통째로 다시 실행시킬
-// 때) 공통적으로 관찰되는 신호들이다. 이 셋 중 무엇이 오든, 지금이
-// "최초 복원이 진행 중인" 상황이 아니라면 오버레이가 남아있지 않도록
-// 여기서 한 번 더 강제로 지운다. 오버레이를 켜는 코드는 위에서 말한 인라인
-// 스크립트 한 곳뿐이므로 이 리스너들이 오버레이를 새로 "켜는" 일은 없다.
-["visibilitychange", "pageshow", "focus"].forEach((evtName) => {
-  const target = evtName === "visibilitychange" ? document : window;
-  target.addEventListener(evtName, () => {
-    if (evtName === "visibilitychange" && document.visibilityState !== "visible") return;
-    if (!initialCloudRestoreInProgress) hideBootSyncOverlay();
-  });
-});
-
 setSourceMode("album");
 renderHome();
 renderList();

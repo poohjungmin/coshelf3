@@ -7,7 +7,7 @@
 // - 아이콘/매니페스트 같은 정적 자산은 cache-first로 서빙한다(자주 안 바뀜).
 // - 그 외 cross-origin 요청(Gemini API, Firebase/gstatic CDN 등)은 손대지 않는다.
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const CACHE_NAME = `coshelf-${CACHE_VERSION}`;
 const PRECACHE_ASSETS = ["./", "icon.png", "icon-512.png", "manifest.json"];
 
