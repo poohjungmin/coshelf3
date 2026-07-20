@@ -2553,14 +2553,16 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
   }
 
   // ---------------------------------------------------------------
-  // 서버 과부하(500/503 "currently experiencing high demand") 대응 재시도 로직
+  // 오류 대응 전략
   // ------------------------------------------------------------------------
-  // 1) 기본 모델(GEMINI_MODEL)로 과부하 발생 시 잠시 대기 후 최대 2번까지
-  //    재시도한다(최초 시도 포함 총 3번, 8초 -> 20초 백오프).
-  // 2) 그래도 계속 과부하면, 더 안정적으로 오래 서비스된 대체 모델
-  //    (GEMINI_FALLBACK_MODEL)로 마지막 한 번 더 시도한다 - 기본 모델
-  //    자체가 장시간 혼잡할 때(짧은 스파이크가 아닐 때) 대비.
-  // 429(요청 과다)는 재시도하지 않고 바로 안내 메시지를 표시한다.
+  // - 429(이 모델의 분당/일일 요청 한도 초과)는 같은 모델로 다시 시도해봐야
+  //   같은 한도에 또 걸릴 뿐이므로 재시도 없이 곧바로 대체 모델로 넘어간다
+  //   (모델마다 한도가 별도로 매겨지므로 다른 모델은 아직 여유가 있을 수 있다).
+  // - 500/503 "high demand"(서버 과부하)는 기본 모델로 잠시 대기 후 최대
+  //   2번까지 재시도한다(최초 시도 포함 총 3번, 8초 -> 20초 백오프).
+  // - 위 두 경우 모두, 기본 모델(GEMINI_MODEL)에서 실패로 끝나면 더 오래
+  //   안정적으로 서비스된 대체 모델(GEMINI_FALLBACK_MODEL)로 마지막 한 번
+  //   더 시도한다.
   // ---------------------------------------------------------------
   const RETRY_DELAYS_MS = [8000, 20000]; // 1차 재시도 8초 후, 2차 재시도 20초 후
   const MAX_RETRIES = RETRY_DELAYS_MS.length; // 최초 시도 1회 + 재시도 2회 = 최대 3번 요청
@@ -2578,9 +2580,10 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
     console.error("[Gemini response status]", response.status);
     console.error("[Gemini response raw text]", errText);
 
-    // 429(요청 과다)는 재시도하지 않고 바로 안내 메시지로 종료
+    // 429는 같은 모델로는 재시도하지 않고, 아래에서 대체 모델을 바로 시도한다.
     if (response.status === 429) {
-      throw new Error("현재 AI 서버 이용량이 많습니다. 잠시 후 다시 시도해주세요.");
+      console.warn(`[Gemini] ${GEMINI_MODEL} 요청 한도 초과(429) - 대체 모델로 바로 넘어갑니다.`);
+      break;
     }
 
     // Gemini가 과부하일 때 500 "high demand" 또는 503 "UNAVAILABLE/high demand"로
@@ -2589,9 +2592,11 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
       (response.status === 500 || response.status === 503) && /high demand/i.test(errText);
 
     if (!isHighDemandError) {
-      // 과부하 관련 오류가 아닌 경우(예: 400 잘못된 요청, 404 모델 없음 등)는
-      // 재시도해도 소용없으므로 바로 종료.
-      throw new Error(`Gemini API 요청 실패 (${response.status}): ${errText}`);
+      // 과부하/한도초과가 아닌 다른 오류(예: 400 잘못된 요청, 404 모델 없음
+      // 등)도 재시도는 의미 없지만, 대체 모델은 한 번 시도해볼 가치가
+      // 있으므로(예: 모델명이 잘못됐을 뿐 대체 모델은 멀쩡할 수 있음) 바로
+      // 종료하지 않고 아래로 진행한다.
+      break;
     }
 
     const hasRetriesLeft = attempt < MAX_RETRIES;
@@ -2606,14 +2611,20 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
   }
 
   if (!response.ok) {
+    const primaryStatus = response.status;
     console.warn(
-      `[Gemini] ${GEMINI_MODEL} 재시도를 모두 소진했습니다 - 대체 모델(${GEMINI_FALLBACK_MODEL})로 마지막으로 시도합니다.`
+      `[Gemini] ${GEMINI_MODEL}에서 실패(${primaryStatus}) - 대체 모델(${GEMINI_FALLBACK_MODEL})로 마지막으로 시도합니다.`
     );
     response = await callModel(GEMINI_FALLBACK_MODEL);
     if (!response.ok) {
       errText = await response.text();
       console.error("[Gemini fallback response status]", response.status);
       console.error("[Gemini fallback response raw text]", errText);
+      // 기본/대체 모델 둘 다 429였다면 특정 모델 문제가 아니라 이 API Key
+      // 자체의 사용량 한도 문제일 가능성이 높으므로 그에 맞는 안내를 준다.
+      if (primaryStatus === 429 && response.status === 429) {
+        throw new Error("현재 AI 서버 이용량이 많습니다. 잠시 후 다시 시도해주세요.");
+      }
       throw new Error(
         "AI 서버가 계속 혼잡합니다. 잠시 후 'AI 분석' 버튼을 다시 눌러 재시도해주세요."
       );
