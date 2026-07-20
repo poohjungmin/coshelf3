@@ -911,6 +911,49 @@
     color: var(--text-secondary);
   }
 
+  /* ============================================================
+     설정 > 입력 방식 - 선택 목록(라디오 스타일)
+     ============================================================ */
+  .settings-radio-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 14px 4px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .settings-radio-row:last-child { border-bottom: none; }
+  .settings-radio-row:active { opacity: 0.6; }
+  .settings-radio-title {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .settings-radio-desc {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+  .settings-radio-check {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent);
+    opacity: 0;
+    flex-shrink: 0;
+    margin-left: 12px;
+  }
+  .settings-radio-row.active .settings-radio-check {
+    opacity: 1;
+  }
+
   .settings-row {
     display: flex;
     align-items: center;
@@ -1298,6 +1341,13 @@
           <span class="settings-menu-chevron">›</span>
         </span>
       </button>
+      <button type="button" class="settings-menu-row" data-target="screen-settings-dateinput">
+        <span class="settings-menu-label">입력 방식</span>
+        <span class="settings-menu-right">
+          <span class="settings-menu-preview" id="menuPreviewDateInput"></span>
+          <span class="settings-menu-chevron">›</span>
+        </span>
+      </button>
       <button type="button" class="settings-menu-row" data-target="screen-settings-backup">
         <span class="settings-menu-label">백업</span>
         <span class="settings-menu-right">
@@ -1382,6 +1432,30 @@
   </section>
 
   <!-- ---- 설정 > 백업 ---- -->
+  <!-- ---- 설정 > 입력 방식 ---- -->
+  <section class="screen" id="screen-settings-dateinput" data-settings-title="입력 방식">
+    <h2 class="settings-section-title">유효기한 입력 방식</h2>
+    <section class="card" style="padding: 4px 16px;">
+      <button type="button" class="settings-radio-row" id="dateInputModeKeyboardBtn" data-mode="keyboard">
+        <span>
+          <span class="settings-radio-title">숫자 직접 입력</span>
+          <span class="settings-radio-desc">숫자 키패드로 YYYY.MM.DD 입력 (기본값)</span>
+        </span>
+        <span class="settings-radio-check">✓</span>
+      </button>
+      <button type="button" class="settings-radio-row" id="dateInputModeCalendarBtn" data-mode="calendar">
+        <span>
+          <span class="settings-radio-title">달력으로 선택</span>
+          <span class="settings-radio-desc">날짜를 터치해서 선택</span>
+        </span>
+        <span class="settings-radio-check">✓</span>
+      </button>
+    </section>
+    <p class="list-sort-note">
+      등록/수정 화면의 소비기한 입력란에 적용됩니다. 언제든 다시 바꿀 수 있습니다.
+    </p>
+  </section>
+
   <section class="screen" id="screen-settings-backup" data-settings-title="백업">
     <section class="card">
       <div id="cloudSyncLoggedOut">
@@ -1745,6 +1819,7 @@ function showScreen(screenId) {
   if (screenId === "screen-settings-apikey") renderApiKeySettings();
   if (screenId === "screen-settings-threshold") renderThresholdSettings();
   if (screenId === "screen-settings-notify") renderNotifySettings();
+  if (screenId === "screen-settings-dateinput") renderDateInputModeSettings();
   if (screenId === "screen-settings-backup") renderCloudSyncUI();
 }
 
@@ -1939,7 +2014,10 @@ function renderThresholdSettings() {
 const menuPreviewApiKey = document.getElementById("menuPreviewApiKey");
 const menuPreviewThreshold = document.getElementById("menuPreviewThreshold");
 const menuPreviewNotify = document.getElementById("menuPreviewNotify");
+const menuPreviewDateInput = document.getElementById("menuPreviewDateInput");
 const menuPreviewBackup = document.getElementById("menuPreviewBackup");
+const dateInputModeKeyboardBtn = document.getElementById("dateInputModeKeyboardBtn");
+const dateInputModeCalendarBtn = document.getElementById("dateInputModeCalendarBtn");
 
 function renderSettingsMenu() {
   const key = getStoredApiKey();
@@ -1950,6 +2028,8 @@ function renderSettingsMenu() {
   menuPreviewNotify.textContent = notifySettings.enabled
     ? `켜짐 (${notifySettings.rules.length}개)`
     : "꺼짐";
+
+  menuPreviewDateInput.textContent = appSettings.dateInputMode === "calendar" ? "달력" : "숫자 입력";
 
   const user = window.coshelfFirebase && window.coshelfFirebase.auth.currentUser;
   menuPreviewBackup.textContent = user && !user.isAnonymous ? user.email : "로그인 안 함";
@@ -2154,12 +2234,79 @@ albumInput.addEventListener("change", () => handleFileSelected(albumInput.files[
    대시(-)를 자동으로 넣어 "YYYY-MM-DD" 형태로 만들어준다.
    ========================================================================= */
 expiryInput.addEventListener("input", () => {
+  if (expiryInput.type === "date") return; // 달력 모드는 네이티브 피커가 값을 관리하므로 그대로 둔다
   const digits = expiryInput.value.replace(/\D/g, "").slice(0, 8);
   expiryInput.value =
     digits.length === 8
       ? `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
       : digits;
 });
+
+/* =========================================================================
+   2-2. 설정 화면 - 유효기한 입력 방식 (숫자 직접입력 vs 달력)
+   ------------------------------------------------------------------------
+   신호등 기준/알림과 관심사가 달라 별도 localStorage 키를 쓴다. 기본값은
+   숫자 직접입력("keyboard")이며, 등록/수정 화면이 공유하는 #expiryInput
+   하나의 type만 바꿔주면 되므로(달력 모드의 .value가 이미 "YYYY-MM-DD"
+   형식) 저장/로드 쪽 코드는 전혀 건드리지 않는다.
+   ========================================================================= */
+const APP_SETTINGS_KEY = "coshelf_app_settings";
+let appSettings = { dateInputMode: "keyboard" };
+
+function loadAppSettingsFromStorage() {
+  try {
+    const raw = localStorage.getItem(APP_SETTINGS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && (parsed.dateInputMode === "keyboard" || parsed.dateInputMode === "calendar")) {
+      appSettings = { dateInputMode: parsed.dateInputMode };
+    }
+  } catch (e) {
+    console.error("[localStorage] 앱 설정을 불러오지 못했습니다:", e);
+  }
+}
+
+function saveAppSettingsToStorage() {
+  try {
+    localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(appSettings));
+  } catch (e) {
+    console.error("[localStorage] 앱 설정을 저장하지 못했습니다:", e);
+  }
+  syncAppSettingsToCloud();
+}
+
+loadAppSettingsFromStorage();
+
+function applyDateInputMode() {
+  if (appSettings.dateInputMode === "calendar") {
+    expiryInput.type = "date";
+    expiryInput.removeAttribute("pattern");
+    expiryInput.removeAttribute("placeholder");
+  } else {
+    expiryInput.type = "text";
+    expiryInput.setAttribute("inputmode", "numeric");
+    expiryInput.setAttribute("pattern", "[0-9]*");
+    expiryInput.placeholder = "숫자 8자리 입력 예: 20280115";
+  }
+}
+applyDateInputMode();
+
+function renderDateInputModeSettings() {
+  dateInputModeKeyboardBtn.classList.toggle("active", appSettings.dateInputMode === "keyboard");
+  dateInputModeCalendarBtn.classList.toggle("active", appSettings.dateInputMode === "calendar");
+}
+
+function selectDateInputMode(mode) {
+  if (appSettings.dateInputMode === mode) return;
+  appSettings.dateInputMode = mode;
+  saveAppSettingsToStorage();
+  applyDateInputMode();
+  renderDateInputModeSettings();
+  renderSettingsMenu();
+}
+
+dateInputModeKeyboardBtn.addEventListener("click", () => selectDateInputMode("keyboard"));
+dateInputModeCalendarBtn.addEventListener("click", () => selectDateInputMode("calendar"));
 
 /* =========================================================================
    3. "AI 분석" 버튼 클릭 -> Gemini Vision API 호출 (로직 변경 없음)
@@ -3120,6 +3267,7 @@ async function syncWithCloud() {
 
     let mergedProducts = products;
     let mergedThresholds = { red: RED_THRESHOLD_DAYS, yellow: YELLOW_THRESHOLD_DAYS };
+    let mergedAppSettings = { ...appSettings };
 
     if (userDocSnap.exists()) {
       // 이미 백업된 계정 - 클라우드 데이터를 받아와 id 기준으로 합친다.
@@ -3136,6 +3284,9 @@ async function syncWithCloud() {
       if (cloudData && cloudData.thresholds) {
         mergedThresholds = cloudData.thresholds;
       }
+      if (cloudData && cloudData.appSettings) {
+        mergedAppSettings = { ...mergedAppSettings, ...cloudData.appSettings };
+      }
     }
 
     // 병합 결과를 로컬 상태/저장소에 반영
@@ -3144,6 +3295,9 @@ async function syncWithCloud() {
     RED_THRESHOLD_DAYS = mergedThresholds.red;
     YELLOW_THRESHOLD_DAYS = mergedThresholds.yellow;
     saveThresholdsToStorage();
+    appSettings = mergedAppSettings;
+    localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(appSettings));
+    applyDateInputMode();
 
     // 병합 결과(로컬에만 있던 항목 포함)를 다시 클라우드에 반영해서
     // 어느 기기에서 다시 로그인해도 항상 최신 합집합을 받아가도록 한다.
@@ -3151,7 +3305,11 @@ async function syncWithCloud() {
     mergedProducts.forEach((p) => {
       batch.set(doc(db, "users", uid, "products", String(p.id)), { ...p, updatedAt: serverTimestamp() });
     });
-    batch.set(userDocRef, { thresholds: mergedThresholds, updatedAt: serverTimestamp() }, { merge: true });
+    batch.set(
+      userDocRef,
+      { thresholds: mergedThresholds, appSettings: mergedAppSettings, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
     await batch.commit();
 
     renderHome();
@@ -3219,6 +3377,21 @@ async function syncThresholdsToCloud() {
     );
   } catch (e) {
     console.error("[클라우드 백업] 신호등 기준 동기화 실패:", e);
+  }
+}
+
+// 유효기한 입력 방식 등 "기타 사용자 설정"이 바뀔 때마다 호출한다.
+async function syncAppSettingsToCloud() {
+  if (!isCloudSyncActive()) return;
+  const { db, auth, doc, setDoc, serverTimestamp } = window.coshelfFirebase;
+  try {
+    await setDoc(
+      doc(db, "users", auth.currentUser.uid),
+      { appSettings: { ...appSettings }, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+  } catch (e) {
+    console.error("[클라우드 백업] 앱 설정 동기화 실패:", e);
   }
 }
 
