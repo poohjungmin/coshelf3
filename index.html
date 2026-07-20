@@ -263,10 +263,13 @@
      투명하게 만들어 래퍼 폭에 절대 못 벗어나게 하는 확실한 방식이다. */
   .expiry-input-wrap {
     width: 100%;
+    height: 46px; /* 다른 입력칸과 동일한 높이로 고정 */
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: #ffffff;
     overflow: hidden;
+    display: flex;
+    align-items: center; /* 세로 중앙정렬은 flex가 담당 - 내부 렌더링과 무관하게 항상 정확함 */
   }
   .expiry-input-wrap:focus-within {
     border-color: var(--accent);
@@ -278,7 +281,7 @@
     max-width: 100%;
     box-sizing: border-box;
     font-size: 16px;
-    padding: 12px 14px;
+    padding: 0 14px; /* 세로 패딩은 wrapper의 flex 중앙정렬이 대신하므로 가로만 */
     border: none;
     background: transparent;
     color: var(--text-primary);
@@ -3307,12 +3310,16 @@ async function syncWithCloud() {
 
   cloudSyncStatus.classList.remove("error", "success");
   cloudSyncStatus.textContent = "동기화 중...";
+  // 설정(백업) 화면이 아니라 홈/목록을 보고 있을 때도, 데이터가 아직 병합
+  // 전이라는 걸 알 수 있도록 화면 어디서든 보이는 토스트도 함께 띄운다.
+  showToast("클라우드와 동기화하는 중...");
 
   try {
     const userDocRef = doc(db, "users", uid);
     const userDocSnap = await getDoc(userDocRef);
 
     let mergedProducts = products;
+    let productsNeedingUpload = products; // 처음 백업하는 계정이면 전부 새로 업로드해야 한다
     let mergedThresholds = { red: RED_THRESHOLD_DAYS, yellow: YELLOW_THRESHOLD_DAYS };
     let mergedAppSettings = { ...appSettings };
 
@@ -3326,6 +3333,9 @@ async function syncWithCloud() {
       // ID는 항상 문자열이라, String()으로 맞춰서 비교해야 정확히 매칭된다.
       const localOnly = products.filter((p) => !cloudProductMap.has(String(p.id)));
       mergedProducts = [...cloudProductMap.values(), ...localOnly];
+      // 클라우드에 이미 있는 항목(사진 포함, 용량 큼)은 다시 안 올린다 -
+      // 로컬에만 있던(새로 추가된) 항목만 업로드하면 되므로 훨씬 빠르다.
+      productsNeedingUpload = localOnly;
 
       const cloudData = userDocSnap.data();
       if (cloudData && cloudData.thresholds) {
@@ -3346,10 +3356,10 @@ async function syncWithCloud() {
     localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(appSettings));
     applyDateInputMode();
 
-    // 병합 결과(로컬에만 있던 항목 포함)를 다시 클라우드에 반영해서
-    // 어느 기기에서 다시 로그인해도 항상 최신 합집합을 받아가도록 한다.
+    // 로컬에만 있던(=클라우드에 아직 없는) 항목만 새로 올린다. 클라우드에서
+    // 받아온 항목은 이미 거기 있으므로 사진까지 통째로 다시 쓸 필요가 없다.
     const batch = writeBatch(db);
-    mergedProducts.forEach((p) => {
+    productsNeedingUpload.forEach((p) => {
       batch.set(doc(db, "users", uid, "products", String(p.id)), { ...p, updatedAt: serverTimestamp() });
     });
     batch.set(
@@ -3366,10 +3376,12 @@ async function syncWithCloud() {
     cloudSyncLastSynced.textContent = new Date().toLocaleString("ko-KR");
     cloudSyncStatus.textContent = "동기화가 완료되었습니다.";
     cloudSyncStatus.classList.add("success");
+    showToast("동기화가 완료되었습니다.", "success");
   } catch (e) {
     console.error("[클라우드 백업] 동기화 실패:", e);
     cloudSyncStatus.textContent = "동기화에 실패했습니다. 잠시 후 다시 시도해주세요.";
     cloudSyncStatus.classList.add("error");
+    showToast("동기화 실패. 네트워크를 확인해주세요.", "error");
   }
 }
 
