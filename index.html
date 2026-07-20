@@ -2531,13 +2531,15 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
   console.log("[Gemini requestBody]", requestBody);
 
   // ---------------------------------------------------------------
-  // 서버 과부하(500 "currently experiencing high demand") 대응 재시도 로직
+  // 서버 과부하(500/503 "currently experiencing high demand") 대응 재시도 로직
   // ------------------------------------------------------------------------
-  // 500(high demand) 발생 시 20초 대기 후 딱 한 번만 재시도한다.
+  // 과부하 발생 시 잠시 대기 후 최대 2번까지 재시도한다(최초 시도 포함 총
+  // 3번). 회차마다 대기 시간을 늘려(8초 -> 20초) 짧은 스파이크는 빨리
+  // 재시도하고, 그래도 안 되면 좀 더 기다렸다가 마지막으로 한 번 더 시도한다.
   // 429(요청 과다)는 재시도하지 않고 바로 안내 메시지를 표시한다.
   // ---------------------------------------------------------------
-  const RETRY_DELAY_MS = 20000; // 20초
-  const MAX_RETRIES = 1; // 최초 시도 1회 + 재시도 1회 = 최대 2번 요청
+  const RETRY_DELAYS_MS = [8000, 20000]; // 1차 재시도 8초 후, 2차 재시도 20초 후
+  const MAX_RETRIES = RETRY_DELAYS_MS.length; // 최초 시도 1회 + 재시도 2회 = 최대 3번 요청
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -2576,14 +2578,24 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
     const hasRetriesLeft = attempt < MAX_RETRIES;
 
     if (isHighDemandError && hasRetriesLeft) {
+      const delay = RETRY_DELAYS_MS[attempt];
       console.warn(
-        `[Gemini] 서버 과부하(${response.status})로 응답이 실패했습니다. 20초 후 한 번만 재시도합니다.`
+        `[Gemini] 서버 과부하(${response.status})로 응답이 실패했습니다. ${delay / 1000}초 후 재시도합니다. (${attempt + 1}/${MAX_RETRIES})`
       );
-      await sleep(RETRY_DELAY_MS);
+      await sleep(delay);
       continue;
     }
 
-    // 재시도 대상이 아니거나(과부하 관련 오류가 아니거나) 재시도를 이미 소진한 경우
+    if (isHighDemandError) {
+      // 재시도를 다 썼는데도 계속 과부하인 경우 - 원문 JSON 대신 사용자가
+      // 바로 행동할 수 있는 안내로 대체한다("AI 분석" 버튼은 이미 다시
+      // 눌러도 되는 상태로 돌아가므로 사진을 다시 고를 필요는 없다).
+      throw new Error(
+        "AI 서버가 계속 혼잡합니다. 잠시 후 'AI 분석' 버튼을 다시 눌러 재시도해주세요."
+      );
+    }
+
+    // 과부하 관련 오류가 아닌 경우
     throw new Error(`Gemini API 요청 실패 (${response.status}): ${errText}`);
   }
 
