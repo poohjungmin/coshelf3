@@ -2688,10 +2688,19 @@ function loadProductsFromStorage() {
 // 현재 products 배열을 localStorage에 그대로 저장한다.
 function saveProductsToStorage() {
   try {
-    console.log(`[debug] saveProductsToStorage: key="${STORAGE_KEY}" products.length=`, products.length);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+    const json = JSON.stringify(products);
+    console.log(
+      `[debug] saveProductsToStorage: key="${STORAGE_KEY}" products.length=`,
+      products.length,
+      "json.length(bytes 근사치)=",
+      json.length
+    );
+    localStorage.setItem(STORAGE_KEY, json);
   } catch (e) {
-    console.error("[localStorage] 제품 목록을 저장하지 못했습니다:", e);
+    // QuotaExceededError면 여기서 조용히 실패하고 마는데, 그러면 메모리상
+    // products는 그대로라 화면엔 보이지만 localStorage엔 실제로 저장이
+    // 안 된 상태가 된다 - 다음 실행 때 로컬이 비어 보이는 원인일 수 있다.
+    console.error(`[localStorage] 제품 목록을 저장하지 못했습니다: name=${e.name} message=${e.message}`, e);
   }
   // 알림을 켠 사용자만 유효기한 요약을 서버로 동기화한다(꺼져 있으면 전송 안 함)
   if (typeof notifySettings !== "undefined" && notifySettings.enabled) {
@@ -3344,6 +3353,7 @@ cloudSyncLoginBtn.addEventListener("click", async () => {
 // 화면은 항상 로컬 데이터를 그대로 유지한 채로(전체 화면 로딩 UI 없음),
 // 병합 결과가 실제로 달라졌을 때만 조용히 다시 그려질 뿐이다.
 async function syncWithCloud() {
+  console.log("before sync : products.length =", products.length);
   if (!window.coshelfFirebase) return;
   const { db, auth, doc, getDoc, getDocs, collection, writeBatch, serverTimestamp } =
     window.coshelfFirebase;
@@ -3393,6 +3403,15 @@ async function syncWithCloud() {
     // 병합 결과를 로컬 상태/저장소에 반영
     products = mergedProducts;
     saveProductsToStorage();
+    {
+      const savedRaw = localStorage.getItem(STORAGE_KEY);
+      console.log(
+        "after saveProductsToStorage : localStorage.getItem(\"coshelf_products\") length =",
+        savedRaw ? savedRaw.length : null,
+        "| parsed count =",
+        savedRaw ? (() => { try { return JSON.parse(savedRaw).length; } catch (e) { return `PARSE_ERROR: ${e.message}`; } })() : 0
+      );
+    }
     RED_THRESHOLD_DAYS = mergedThresholds.red;
     YELLOW_THRESHOLD_DAYS = mergedThresholds.yellow;
     saveThresholdsToStorage();
