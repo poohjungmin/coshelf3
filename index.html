@@ -235,9 +235,8 @@
 
   .result-field input {
     width: 100%;
-    height: 46px; /* type="date"가 iOS에서 내부 줄높이를 다르게 그려서 명시적으로 고정 */
     font-size: 16px;
-    padding: 0 14px;
+    padding: 12px 14px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: #ffffff;
@@ -259,9 +258,14 @@
   /* type="date"는 Safari 기본 렌더링이 display: inline-flex인데, iOS 17은
      이 모드에서 width: 100%를 무시하고 내용물 크기만큼 늘어나 오른쪽으로
      삐져나온다(iOS 18+에서는 고쳐졌지만 하위 버전 대응을 위해 명시적으로
-     block으로 바꿔준다). 정렬도 가운데가 기본이라 왼쪽 정렬로 맞추고,
-     내부 값은 별도 의사요소(::-webkit-date-and-time-value)로 그려지므로
-     그쪽에도 똑같이 지정해야 실제로 적용된다. */
+     block으로 바꿔준다). block으로 바꾸면 inline-flex가 자동으로 해주던
+     세로 중앙정렬이 사라지고 내부 -webkit-datetime-edit 요소가 자체
+     line-height/padding을 가지고 있어 위로 붙어 보이므로 그것도 0으로
+     정리한다(높이는 강제로 고정하지 않고 다른 입력칸과 동일하게 패딩으로
+     자연스럽게 맞춘다 - height를 직접 주면 내부 요소가 그 안에서 다시
+     어긋난다). 정렬도 가운데가 기본이라 왼쪽 정렬로 맞추고, 내부 값은
+     별도 의사요소(::-webkit-date-and-time-value)로 그려지므로 그쪽에도
+     똑같이 지정해야 실제로 적용된다. */
   .result-field input[type="date"] {
     display: block;
     -webkit-appearance: textfield;
@@ -269,6 +273,10 @@
   }
   .result-field input[type="date"]::-webkit-date-and-time-value {
     text-align: left;
+  }
+  .result-field input[type="date"]::-webkit-datetime-edit {
+    line-height: 1;
+    padding: 0;
   }
 
   /* ---------------- 상태 표시 ---------------- */
