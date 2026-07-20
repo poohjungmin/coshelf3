@@ -1951,19 +1951,45 @@ sheetBackdrop.addEventListener("click", closeActionSheet);
 sheetCancelBtn.addEventListener("click", closeActionSheet);
 
 // Action Sheet에서 방식을 선택했을 때: 신규 등록 상태로 초기화 후 등록 화면으로 이동
+// "사진 업로드"는 등록 화면으로 바로 넘기지 않고, 지금 떠 있는 Action Sheet
+// (+회색 배경)를 그대로 둔 채 네이티브 사진 선택 UI를 그 위에 띄운다.
+// 화면 전환은 사진을 고르거나(change) 취소해서 포커스가 돌아온 뒤에야
+// 한다 - 그래야 "액션시트 -> 등록화면(빈 상태) -> 네이티브 선택창" 순서로
+// 먼저 확 바뀌었다가 선택창이 뜨는 부자연스러운 깜빡임이 없어진다.
+let pendingAlbumRegister = false;
+
+function finishPendingAlbumRegister() {
+  if (!pendingAlbumRegister) return;
+  pendingAlbumRegister = false;
+  editingProductId = null;
+  if (resultCardTitle) resultCardTitle.textContent = "제품 정보 (직접 수정 가능)";
+  saveBtn.textContent = "저장하기";
+  setSourceMode("album");
+  showScreen("screen-register");
+  closeActionSheet();
+}
+
+// 네이티브 사진 선택 UI가 닫히면(선택/취소 모두) 포커스가 페이지로 돌아온다.
+// change 이벤트가 먼저 오든 나중에 오든, finishPendingAlbumRegister()가
+// pendingAlbumRegister 플래그로 중복 실행을 막아주므로 순서는 상관없다.
+window.addEventListener("focus", finishPendingAlbumRegister);
+
 function beginRegister(mode) {
+  if (mode === "album") {
+    pendingAlbumRegister = true;
+    albumInput.click();
+    return;
+  }
+
   editingProductId = null;
   if (resultCardTitle) resultCardTitle.textContent = "제품 정보 (직접 수정 가능)";
   saveBtn.textContent = "저장하기";
 
   setSourceMode(mode);
   showScreen("screen-register");
-
-  if (mode === "album") albumInput.click();
 }
 
 sheetAlbumBtn.addEventListener("click", () => {
-  closeActionSheet();
   requestRegisterWithAiCheck("album");
 });
 sheetManualBtn.addEventListener("click", () => {
@@ -1980,8 +2006,10 @@ sheetManualBtn.addEventListener("click", () => {
    ========================================================================= */
 function requestRegisterWithAiCheck(mode) {
   if (getStoredApiKey()) {
-    beginRegister(mode);
+    beginRegister(mode); // 액션시트는 네이티브 사진 선택창이 끝난 뒤 beginRegister 쪽에서 닫는다
   } else {
+    // API Key가 없어서 우리 모달(네이티브 UI 아님)로 안내하는 경우는 지금처럼 바로 닫는다
+    closeActionSheet();
     pendingAiMode = mode;
     openKeyRequiredModal();
   }
@@ -2317,7 +2345,10 @@ function handleFileSelected(file) {
   reader.readAsDataURL(file);
 }
 
-albumInput.addEventListener("change", () => handleFileSelected(albumInput.files[0]));
+albumInput.addEventListener("change", () => {
+  finishPendingAlbumRegister();
+  handleFileSelected(albumInput.files[0]);
+});
 
 /* =========================================================================
    2-1. 소비기한 숫자 입력 자동 포맷 (YYYYMMDD 입력 -> YYYY-MM-DD로 자동 변환)
@@ -3604,10 +3635,18 @@ function renderHome() {
     </div>
   `;
 
-  // 우선순위: 🔴(임박/만료) > 🟡(주의) > 🟢(안심) - 가장 급한 상태 하나만 보여준다
+  // 우선순위: ⚫(만료) > 🔴(임박) > 🟡(주의) > 🟢(안심) - 가장 급한 상태 하나만 보여준다.
+  // 리스트에 뭘 보여줄지(urgentItems = 만료+임박 묶음)는 그대로 두고, 문구만
+  // 그 안에 만료(⚫) 제품이 하나라도 있는지에 따라 갈린다.
   if (urgentItems.length > 0) {
+    const hasExpired = urgentItems.some((p) => p.dday.status === "expired");
     homeHero.className = "home-hero is-urgent";
-    homeHero.innerHTML = `
+    homeHero.innerHTML = hasExpired
+      ? `
+      <p class="line1">다음에는</p>
+      <p class="line2">놓치지 말아요.</p>
+    `
+      : `
       <p class="line1">이 친구,</p>
       <p class="line2">슬슬 급해 보입니다.</p>
     `;
