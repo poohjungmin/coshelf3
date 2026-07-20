@@ -2711,12 +2711,77 @@ function setFieldValue(inputEl, value) {
 
 /* =========================================================================
    4. 제품 저장 (localStorage 사용 - Firebase/로그인 없이 새로고침 후에도 유지)
+   ------------------------------------------------------------------------
+   iOS Safari에서 localStorage는 origin당 용량이 작아(대략 5MB) 제품 사진
+   (base64)을 products 배열에 그대로 넣어 저장하면 제품 몇 개만 쌓여도
+   QuotaExceededError로 조용히 실패한다(메모리상 products는 그대로라 화면은
+   멀쩡해 보이지만, 다음 실행 때 localStorage를 다시 읽으면 텅 비어있는
+   증상으로 나타남 - 실제로 겪은 버그). 그래서 용량이 작은 메타데이터
+   (브랜드/제품명/유효기한 등)만 localStorage에 저장하고, 용량이 큰 사진은
+   훨씬 넉넉한 한도를 가진 IndexedDB에 제품 id 기준으로 따로 저장한다.
    ========================================================================= */
 // products: { id, imageDataUrl, brand, product, category, expiryDate(YYYY-MM-DD), createdAt }
 const STORAGE_KEY = "coshelf_products";
+const IMAGE_DB_NAME = "coshelf_images";
+const IMAGE_STORE_NAME = "images";
 
-// localStorage에서 저장된 제품 목록을 불러온다. 저장된 값이 없거나
-// 형식이 깨져 있으면 빈 배열로 시작한다.
+function openImageDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IMAGE_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(IMAGE_STORE_NAME)) {
+        req.result.createObjectStore(IMAGE_STORE_NAME);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbSetImage(id, dataUrl) {
+  const db = await openImageDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IMAGE_STORE_NAME, "readwrite");
+    tx.objectStore(IMAGE_STORE_NAME).put(dataUrl, String(id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbDeleteImage(id) {
+  const db = await openImageDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IMAGE_STORE_NAME, "readwrite");
+    tx.objectStore(IMAGE_STORE_NAME).delete(String(id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// 모든 제품 사진을 한 번에 불러와 { 제품id: dataUrl } 형태의 Map으로 돌려준다.
+async function idbGetAllImages() {
+  const db = await openImageDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IMAGE_STORE_NAME, "readonly");
+    const store = tx.objectStore(IMAGE_STORE_NAME);
+    const map = new Map();
+    const cursorReq = store.openCursor();
+    cursorReq.onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        map.set(cursor.key, cursor.value);
+        cursor.continue();
+      } else {
+        resolve(map);
+      }
+    };
+    cursorReq.onerror = () => reject(cursorReq.error);
+  });
+}
+
+// localStorage에서 저장된 제품 목록(사진 제외 메타데이터)을 불러온다.
+// 저장된 값이 없거나 형식이 깨져 있으면 빈 배열로 시작한다. 사진은 이
+// 함수가 끝난 뒤 hydrateProductImages()가 IndexedDB에서 비동기로 채운다.
 function loadProductsFromStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -2730,14 +2795,17 @@ function loadProductsFromStorage() {
   }
 }
 
-// 현재 products 배열을 localStorage에 그대로 저장한다.
+// 현재 products 배열을 저장한다: 용량이 작은 메타데이터는 localStorage에,
+// 용량이 큰 사진(imageDataUrl)은 IndexedDB에 제품 id 기준으로 분리 저장한다.
 function saveProductsToStorage() {
   try {
-    const json = JSON.stringify(products);
+    // 사진을 뺀 "가벼운" 버전만 localStorage에 저장 - 이게 이번 수정의 핵심.
+    const lightProducts = products.map(({ imageDataUrl, ...rest }) => rest);
+    const json = JSON.stringify(lightProducts);
     console.log(
       `[debug] saveProductsToStorage: key="${STORAGE_KEY}" products.length=`,
       products.length,
-      "json.length(bytes 근사치)=",
+      "json.length(사진 제외, bytes 근사치)=",
       json.length
     );
     localStorage.setItem(STORAGE_KEY, json);
@@ -2749,14 +2817,49 @@ function saveProductsToStorage() {
     console.error(`[localStorage] 제품 목록을 저장하지 못했습니다: name=${e.name} message=${e.message}`, e);
     debugSet("6. save 에러", `${e.name}: ${e.message}`);
   }
+  // 사진은 별도로, 실패해도 메타데이터 저장에는 영향 없도록 fire-and-forget으로 IndexedDB에 저장한다.
+  products.forEach((p) => {
+    if (p.imageDataUrl) {
+      idbSetImage(p.id, p.imageDataUrl).catch((e) =>
+        console.error("[IndexedDB] 사진 저장 실패:", p.id, e)
+      );
+    }
+  });
   // 알림을 켠 사용자만 유효기한 요약을 서버로 동기화한다(꺼져 있으면 전송 안 함)
   if (typeof notifySettings !== "undefined" && notifySettings.enabled) {
     syncNotifyStateToFirestore();
   }
 }
 
-// 앱 시작 시 기존 저장된 제품을 불러와 초기 상태로 사용
+// 앱 시작 시 기존 저장된 제품(사진 제외)을 불러와 초기 상태로 사용 -
+// localStorage 읽기는 동기라 즉시 첫 렌더에 반영된다.
 let products = loadProductsFromStorage();
+
+// 사진은 IndexedDB에서 비동기로 불러와 합친 뒤, 실제로 채워진 게 있을
+// 때만 다시 그린다. 첫 렌더는 사진 없이(플레이스홀더 아이콘) 곧바로
+// 뜨고, 사진은 잠시 후 자연스럽게 채워진다.
+async function hydrateProductImages() {
+  try {
+    const imageMap = await idbGetAllImages();
+    if (imageMap.size === 0) return;
+    let changed = false;
+    products = products.map((p) => {
+      const img = imageMap.get(String(p.id));
+      if (img && p.imageDataUrl !== img) {
+        changed = true;
+        return { ...p, imageDataUrl: img };
+      }
+      return p;
+    });
+    if (changed) {
+      renderHome();
+      renderList();
+    }
+  } catch (e) {
+    console.error("[IndexedDB] 사진 불러오기 실패:", e);
+  }
+}
+hydrateProductImages();
 console.log("[debug] products.length right after loadProductsFromStorage() =", products.length);
 debugSet("1. load 직후 products.length", products.length);
 debugSet("2. localStorage raw 길이", (localStorage.getItem(STORAGE_KEY) || "").length);
@@ -2961,6 +3064,7 @@ function openEditProduct(id) {
 function deleteProduct(id) {
   products = products.filter((p) => p.id !== id);
   saveProductsToStorage();
+  idbDeleteImage(id).catch((e) => console.error("[IndexedDB] 사진 삭제 실패:", id, e));
   deleteProductFromCloud(id); // 로그인 상태라면 Firestore에서도 이 문서만 삭제
   renderHome();
   renderList();
