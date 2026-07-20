@@ -382,6 +382,9 @@
   .home-hero.is-safe .line2 { color: var(--text-primary); }
   .home-hero.is-urgent .line2 { color: var(--danger); }
   .home-hero.is-warning .line2 { color: var(--warning); }
+  /* 만료(⚫) 제품이 있을 때는 임박(🔴)과 같은 is-urgent 클래스를 쓰되
+     문구 색만 검은색(다른 곳의 만료 상태와 동일한 --dead)으로 덮어쓴다. */
+  .home-hero.is-expired .line2 { color: var(--dead); }
 
   .home-empty {
     text-align: center;
@@ -1275,10 +1278,12 @@
 <body>
 <div class="app">
 
-  <!-- 이 기기에서 예전에 구글 백업으로 로그인한 적이 있으면(coshelf_cloud_linked),
-       클라우드 동기화가 끝나기 전까지 예전 데이터가 잠깐 보였다가 바뀌는 것을
-       막기 위해 아주 짧게 이 화면으로 가린다. 백업을 쓴 적 없는 사용자는 이
-       오버레이 자체가 뜨지 않아 지금처럼 항상 즉시 렌더링된다. -->
+  <!-- 로컬에 저장된 제품이 하나도 없는 상태(최초 설치 등)에서, 예전에 구글
+       백업 로그인을 한 적이 있는 기기라면(coshelf_cloud_linked) 클라우드에
+       내려받을 데이터가 있을 수 있으므로 그 동기화가 끝날 때까지만 잠깐
+       가린다. 로컬에 제품이 하나라도 있으면(대부분의 재실행) 이 오버레이는
+       절대 뜨지 않고, 로컬 캐시를 즉시 그대로 보여준 뒤 동기화는 화면 뒤에서
+       조용히 진행되고 변경된 게 있을 때만 UI가 갱신된다. -->
   <div class="boot-sync-overlay" id="bootSyncOverlay" style="display:none;">
     <span class="spinner boot-sync-spinner"></span>
     <p>최신 데이터를 불러오는 중...</p>
@@ -1286,11 +1291,20 @@
   <script>
     // 아래쪽 메인 스크립트가 로드되기 전, 파서가 여기 도달하는 즉시(동기)
     // 실행되어야 화면 아래 콘텐츠가 그려지기 전에 오버레이로 가릴 수 있다.
-    // 예전에 구글 백업 로그인을 한 적 없는 기기는 이 값이 없어 아무 일도
-    // 일어나지 않고 지금처럼 항상 즉시 렌더링된다.
-    if (localStorage.getItem("coshelf_cloud_linked") === "1") {
-      document.getElementById("bootSyncOverlay").style.display = "flex";
-    }
+    (function () {
+      var linkedBefore = localStorage.getItem("coshelf_cloud_linked") === "1";
+      var hasLocalProducts = false;
+      try {
+        var raw = localStorage.getItem("coshelf_products");
+        var parsed = raw ? JSON.parse(raw) : [];
+        hasLocalProducts = Array.isArray(parsed) && parsed.length > 0;
+      } catch (e) {
+        hasLocalProducts = false;
+      }
+      if (linkedBefore && !hasLocalProducts) {
+        document.getElementById("bootSyncOverlay").style.display = "flex";
+      }
+    })();
   </script>
 
   <header class="top">
@@ -3552,8 +3566,9 @@ window.addEventListener("coshelf-auth-changed", async () => {
   // 판단한다(이벤트 payload와 실제 상태가 어긋날 여지를 원천 차단).
   const user = window.coshelfFirebase.auth.currentUser;
   if (user && !user.isAnonymous) {
-    // 다음에 앱을 열 때 동기화가 끝날 때까지 화면을 가려서, 예전 데이터가
-    // 잠깐 보였다가 최신 데이터로 바뀌는 깜빡임 자체를 없앤다.
+    // 다음에 로컬 데이터가 하나도 없는 상태로(최초 설치 등) 앱을 열었을 때는
+    // 이 값으로 "동기화해서 클라우드 데이터를 받아올 가능성이 있다"는 걸
+    // 판단해 로딩 오버레이를 잠깐 보여줄 수 있다(body 상단 인라인 스크립트).
     localStorage.setItem(CLOUD_LINKED_KEY, "1");
     if (!cloudSyncedThisSession) {
       cloudSyncedThisSession = true;
@@ -3640,7 +3655,7 @@ function renderHome() {
   // 그 안에 만료(⚫) 제품이 하나라도 있는지에 따라 갈린다.
   if (urgentItems.length > 0) {
     const hasExpired = urgentItems.some((p) => p.dday.status === "expired");
-    homeHero.className = "home-hero is-urgent";
+    homeHero.className = hasExpired ? "home-hero is-urgent is-expired" : "home-hero is-urgent";
     homeHero.innerHTML = hasExpired
       ? `
       <p class="line1">다음에는</p>
