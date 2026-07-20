@@ -3457,10 +3457,6 @@ async function syncWithCloud() {
 
   cloudSyncStatus.classList.remove("error", "success");
   cloudSyncStatus.textContent = "동기화 중...";
-  // 설정(백업) 화면이 아니라 홈/목록을 보고 있을 때도, 데이터가 아직 병합
-  // 전이라는 걸 알 수 있도록 화면 어디서든 보이는 토스트도 함께 띄운다.
-  // (전체 화면을 가리는 게 아니라 작은 토스트라서 언제 떠도 화면을 안 가림)
-  showToast("클라우드와 동기화하는 중...");
 
   try {
     const userDocRef = doc(db, "users", uid);
@@ -3528,7 +3524,6 @@ async function syncWithCloud() {
     cloudSyncLastSynced.textContent = new Date().toLocaleString("ko-KR");
     cloudSyncStatus.textContent = "동기화가 완료되었습니다.";
     cloudSyncStatus.classList.add("success");
-    showToast("동기화가 완료되었습니다.", "success");
   } catch (e) {
     // 실패해도 products/appSettings 등은 위 try 블록에서 이미 성공적으로
     // 병합/저장된 경우가 아니면 전혀 건드리지 않았으므로, 화면은 항상
