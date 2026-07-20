@@ -279,9 +279,14 @@
     display: block;
     width: 100%;
     max-width: 100%;
+    height: 47px;
+    line-height: 47px; /* 한 줄 텍스트를 세로로 정확히 가운데 두는 고전적인 방식.
+      wrapper의 flex 중앙정렬은 date input 내부(-webkit-datetime-edit) 렌더링에는
+      완전히 먹히지 않아서, input 자체의 line-height를 높이와 똑같이 맞춰
+      내부 렌더링 방식과 무관하게 항상 중앙에 오도록 이중으로 보장한다. */
     box-sizing: border-box;
     font-size: 16px;
-    padding: 0 14px; /* 세로 패딩은 wrapper의 flex 중앙정렬이 대신하므로 가로만 */
+    padding: 0 14px;
     border: none;
     background: transparent;
     color: var(--text-primary);
@@ -293,10 +298,7 @@
   }
   .expiry-input-wrap input[type="date"]::-webkit-date-and-time-value {
     text-align: left;
-  }
-  .expiry-input-wrap input[type="date"]::-webkit-datetime-edit {
-    line-height: 1;
-    padding: 0;
+    line-height: 47px;
   }
 
   /* ---------------- 상태 표시 ---------------- */
@@ -322,6 +324,28 @@
     margin-right: 6px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  .boot-sync-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+  .boot-sync-overlay .boot-sync-spinner {
+    width: 26px;
+    height: 26px;
+    border-width: 3px;
+    margin-right: 0;
+  }
+  .boot-sync-overlay p {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
 
   .key-warning {
     font-size: 12px;
@@ -1250,6 +1274,24 @@
 </head>
 <body>
 <div class="app">
+
+  <!-- 이 기기에서 예전에 구글 백업으로 로그인한 적이 있으면(coshelf_cloud_linked),
+       클라우드 동기화가 끝나기 전까지 예전 데이터가 잠깐 보였다가 바뀌는 것을
+       막기 위해 아주 짧게 이 화면으로 가린다. 백업을 쓴 적 없는 사용자는 이
+       오버레이 자체가 뜨지 않아 지금처럼 항상 즉시 렌더링된다. -->
+  <div class="boot-sync-overlay" id="bootSyncOverlay" style="display:none;">
+    <span class="spinner boot-sync-spinner"></span>
+    <p>최신 데이터를 불러오는 중...</p>
+  </div>
+  <script>
+    // 아래쪽 메인 스크립트가 로드되기 전, 파서가 여기 도달하는 즉시(동기)
+    // 실행되어야 화면 아래 콘텐츠가 그려지기 전에 오버레이로 가릴 수 있다.
+    // 예전에 구글 백업 로그인을 한 적 없는 기기는 이 값이 없어 아무 일도
+    // 일어나지 않고 지금처럼 항상 즉시 렌더링된다.
+    if (localStorage.getItem("coshelf_cloud_linked") === "1") {
+      document.getElementById("bootSyncOverlay").style.display = "flex";
+    }
+  </script>
 
   <header class="top">
     <button type="button" class="back-btn" id="registerBackBtn" aria-label="뒤로가기" style="display:none;">‹</button>
@@ -3478,10 +3520,19 @@ window.addEventListener("coshelf-auth-changed", async () => {
   // 이벤트에 실려온 값이 아니라, 그 시점의 실제 인증 상태를 다시 읽어서
   // 판단한다(이벤트 payload와 실제 상태가 어긋날 여지를 원천 차단).
   const user = window.coshelfFirebase.auth.currentUser;
-  if (user && !user.isAnonymous && !cloudSyncedThisSession) {
-    cloudSyncedThisSession = true;
-    await syncWithCloud();
+  if (user && !user.isAnonymous) {
+    // 다음에 앱을 열 때 동기화가 끝날 때까지 화면을 가려서, 예전 데이터가
+    // 잠깐 보였다가 최신 데이터로 바뀌는 깜빡임 자체를 없앤다.
+    localStorage.setItem(CLOUD_LINKED_KEY, "1");
+    if (!cloudSyncedThisSession) {
+      cloudSyncedThisSession = true;
+      await syncWithCloud();
+    }
   }
+  // 동기화가 필요 없던 경우(익명 상태)든, 방금 동기화가 끝난 경우든
+  // 여기서 오버레이를 지운다. syncWithCloud()는 내부적으로 실패도 처리하고
+  // 절대 예외를 던지지 않으므로 항상 이 지점까지 도달한다.
+  hideBootSyncOverlay();
 });
 
 function computeDday(expiryStr) {
@@ -3795,6 +3846,16 @@ function escapeHtml(str) {
 /* =========================================================================
    9. 초기화
    ========================================================================= */
+const CLOUD_LINKED_KEY = "coshelf_cloud_linked";
+const bootSyncOverlay = document.getElementById("bootSyncOverlay");
+function hideBootSyncOverlay() {
+  bootSyncOverlay.style.display = "none";
+}
+// 오프라인이거나 Firebase 로드 자체가 막힌 경우(광고 차단기 등) 오버레이가
+// 영원히 안 사라지는 것을 막는 안전장치. 정상 상황에서는 그 전에
+// coshelf-auth-changed 처리가 먼저 오버레이를 지운다.
+setTimeout(hideBootSyncOverlay, 5000);
+
 setSourceMode("album");
 renderHome();
 renderList();
