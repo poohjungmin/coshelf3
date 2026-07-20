@@ -3389,16 +3389,28 @@ cloudSyncLoginBtn.addEventListener("click", async () => {
 
 // 로그인 성공 시(리다이렉트 복귀 시점, 또는 이미 로그인된 상태로 앱을 다시
 // 열었을 때) 클라우드와 동기화한다. id 기준으로 합쳐서 데이터를 잃지 않는다.
-async function syncWithCloud() {
-  if (!window.coshelfFirebase) return;
+// showLoading: true는 "로컬에 제품이 전혀 없는 상태(최초 설치 등)라서 boot
+// 오버레이가 떠 있고, 이걸 지울 책임이 이 호출에 있다"는 뜻이다. 그 외의
+// 모든 호출(백그라운드 복귀로 페이지가 다시 실행되는 경우 등)은 항상
+// showLoading:false로 불려야 하고, 이 함수는 그 경우 전체 화면 UI를
+// 절대 건드리지 않는다 - 화면은 로컬 데이터를 그대로 유지한 채로, 병합
+// 결과가 실제로 달라졌을 때만 조용히 다시 그려질 뿐이다.
+async function syncWithCloud({ showLoading = false } = {}) {
+  if (!window.coshelfFirebase) {
+    if (showLoading) hideBootSyncOverlay();
+    return;
+  }
   const { db, auth, doc, getDoc, getDocs, collection, writeBatch, serverTimestamp } =
     window.coshelfFirebase;
   const uid = auth.currentUser.uid;
+
+  const productsBeforeSync = JSON.stringify(products);
 
   cloudSyncStatus.classList.remove("error", "success");
   cloudSyncStatus.textContent = "동기화 중...";
   // 설정(백업) 화면이 아니라 홈/목록을 보고 있을 때도, 데이터가 아직 병합
   // 전이라는 걸 알 수 있도록 화면 어디서든 보이는 토스트도 함께 띄운다.
+  // (전체 화면을 가리는 게 아니라 작은 토스트라서 백그라운드 복귀 시에도 유지)
   showToast("클라우드와 동기화하는 중...");
 
   try {
@@ -3456,8 +3468,12 @@ async function syncWithCloud() {
     );
     await batch.commit();
 
-    renderHome();
-    renderList();
+    // 병합 결과가 병합 전 로컬 데이터와 실제로 다를 때만 홈/목록을 다시
+    // 그린다 - 바뀐 게 없으면 화면을 건드릴 이유가 없다.
+    if (JSON.stringify(products) !== productsBeforeSync) {
+      renderHome();
+      renderList();
+    }
     renderCloudSyncUI();
     renderSettingsMenu(); // 병합으로 신호등 기준 등이 바뀌었을 수 있어 미리보기도 갱신
     cloudSyncLastSynced.textContent = new Date().toLocaleString("ko-KR");
@@ -3465,10 +3481,15 @@ async function syncWithCloud() {
     cloudSyncStatus.classList.add("success");
     showToast("동기화가 완료되었습니다.", "success");
   } catch (e) {
+    // 실패해도 products/appSettings 등은 위 try 블록에서 이미 성공적으로
+    // 병합/저장된 경우가 아니면 전혀 건드리지 않았으므로, 화면은 항상
+    // 기존 로컬 상태 그대로 유지된다.
     console.error("[클라우드 백업] 동기화 실패:", e);
     cloudSyncStatus.textContent = "동기화에 실패했습니다. 잠시 후 다시 시도해주세요.";
     cloudSyncStatus.classList.add("error");
     showToast("동기화 실패. 네트워크를 확인해주세요.", "error");
+  } finally {
+    if (showLoading) hideBootSyncOverlay();
   }
 }
 
@@ -3572,12 +3593,18 @@ window.addEventListener("coshelf-auth-changed", async () => {
     localStorage.setItem(CLOUD_LINKED_KEY, "1");
     if (!cloudSyncedThisSession) {
       cloudSyncedThisSession = true;
-      await syncWithCloud();
+      // wasBootOverlayShown이 true인 딱 한 번(로컬 데이터가 없어서 최초
+      // 복원이 필요했던 경우)만 로딩을 표시한다. cloudSyncedThisSession
+      // 가드 덕분에 이후(백그라운드 복귀로 다시 실행돼도 새 세션이라
+      // 이 코드가 다시 여기까지 올 수는 있지만) 같은 세션 안에서는 이
+      // 분기에 두 번 들어오지 않으므로, 그 뒤로는 항상 조용한 동기화다.
+      await syncWithCloud({ showLoading: wasBootOverlayShown });
     }
   }
-  // 동기화가 필요 없던 경우(익명 상태)든, 방금 동기화가 끝난 경우든
-  // 여기서 오버레이를 지운다. syncWithCloud()는 내부적으로 실패도 처리하고
-  // 절대 예외를 던지지 않으므로 항상 이 지점까지 도달한다.
+  // 오버레이를 "켜는" 곳은 body 상단 인라인 스크립트 단 하나뿐이다. 여기서는
+  // 그게 켜져 있을 수 있는 유일한 정상 경로(최초 복원)를 마무리하는
+  // 의미로 한 번 더 지운다 - 이미 안 떠 있었다면 안전한 no-op이다.
+  initialCloudRestoreInProgress = false;
   hideBootSyncOverlay();
 });
 
@@ -3902,13 +3929,37 @@ function escapeHtml(str) {
    ========================================================================= */
 const CLOUD_LINKED_KEY = "coshelf_cloud_linked";
 const bootSyncOverlay = document.getElementById("bootSyncOverlay");
+// 오버레이를 "켜는" 곳은 body 상단의 인라인 스크립트 단 하나뿐이다(로컬에
+// 제품이 하나도 없는 최초 설치 상황일 때만 display:flex로 켜 둔다). 이
+// 시점에 그 스타일을 읽어서 "이번 실행이 최초 복원 상황인지"를 한 번만
+// 판단해두면, 로컬 데이터가 있던 실행에서는 이 값이 항상 false이므로
+// 이후 어떤 이벤트가 와도 오버레이가 다시 켜질 일이 없다.
+const wasBootOverlayShown = bootSyncOverlay.style.display !== "none";
+let initialCloudRestoreInProgress = wasBootOverlayShown;
 function hideBootSyncOverlay() {
   bootSyncOverlay.style.display = "none";
 }
 // 오프라인이거나 Firebase 로드 자체가 막힌 경우(광고 차단기 등) 오버레이가
 // 영원히 안 사라지는 것을 막는 안전장치. 정상 상황에서는 그 전에
 // coshelf-auth-changed 처리가 먼저 오버레이를 지운다.
-setTimeout(hideBootSyncOverlay, 5000);
+setTimeout(() => {
+  initialCloudRestoreInProgress = false;
+  hideBootSyncOverlay();
+}, 5000);
+
+// 방어적 안전장치: visibilitychange/pageshow/focus는 앱이 백그라운드에서
+// 돌아올 때(또는 iOS가 메모리 확보를 위해 페이지를 통째로 다시 실행시킬
+// 때) 공통적으로 관찰되는 신호들이다. 이 셋 중 무엇이 오든, 지금이
+// "최초 복원이 진행 중인" 상황이 아니라면 오버레이가 남아있지 않도록
+// 여기서 한 번 더 강제로 지운다. 오버레이를 켜는 코드는 위에서 말한 인라인
+// 스크립트 한 곳뿐이므로 이 리스너들이 오버레이를 새로 "켜는" 일은 없다.
+["visibilitychange", "pageshow", "focus"].forEach((evtName) => {
+  const target = evtName === "visibilitychange" ? document : window;
+  target.addEventListener(evtName, () => {
+    if (evtName === "visibilitychange" && document.visibilityState !== "visible") return;
+    if (!initialCloudRestoreInProgress) hideBootSyncOverlay();
+  });
+});
 
 setSourceMode("album");
 renderHome();
