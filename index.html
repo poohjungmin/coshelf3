@@ -2622,11 +2622,16 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
       console.error("[Gemini fallback response raw text]", errText);
       // 기본/대체 모델 둘 다 429였다면 특정 모델 문제가 아니라 이 API Key
       // 자체의 사용량 한도 문제일 가능성이 높으므로 그에 맞는 안내를 준다.
+      // (임시) 어떤 quota 항목에 걸렸는지 정확히 알아야 원인을 좁힐 수
+      // 있어서, 화면에도 원문 오류를 그대로 붙여서 보여준다 - 원격
+      // 디버깅 없이 스크린샷만으로 확인 가능하게.
       if (primaryStatus === 429 && response.status === 429) {
-        throw new Error("현재 AI 서버 이용량이 많습니다. 잠시 후 다시 시도해주세요.");
+        throw new Error(
+          `현재 AI 서버 이용량이 많습니다. 잠시 후 다시 시도해주세요. [원인 확인용] ${errText}`
+        );
       }
       throw new Error(
-        "AI 서버가 계속 혼잡합니다. 잠시 후 'AI 분석' 버튼을 다시 눌러 재시도해주세요."
+        `AI 서버가 계속 혼잡합니다. 잠시 후 'AI 분석' 버튼을 다시 눌러 재시도해주세요. [원인 확인용] ${errText}`
       );
     }
   }
