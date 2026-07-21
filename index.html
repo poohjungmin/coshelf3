@@ -2610,7 +2610,7 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
   //   안정적으로 서비스된 대체 모델(GEMINI_FALLBACK_MODEL)로 마지막 한 번
   //   더 시도한다.
   // ---------------------------------------------------------------
-  const RETRY_DELAYS_MS = [8000, 20000]; // 1차 재시도 8초 후, 2차 재시도 20초 후
+  const RETRY_DELAYS_MS = [5000, 12000]; // 1차 재시도 5초 후, 2차 재시도 12초 후 (최악의 경우 대기가 너무 길어지지 않도록 단축)
   const MAX_RETRIES = RETRY_DELAYS_MS.length; // 최초 시도 1회 + 재시도 2회 = 최대 3번 요청
 
   let response;
@@ -2651,6 +2651,8 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
       console.warn(
         `[Gemini] ${GEMINI_MODEL} 과부하(${response.status})로 응답이 실패했습니다. ${delay / 1000}초 후 재시도합니다. (${attempt + 1}/${MAX_RETRIES})`
       );
+      // 화면이 멈춘 것처럼 보이지 않도록, 대기/재시도 중이라는 걸 사용자에게 알려준다.
+      statusText.innerHTML = `<span class="spinner"></span>AI 서버가 혼잡합니다. 잠시 후 다시 시도합니다... (${attempt + 1}/${MAX_RETRIES})`;
       await sleep(delay);
     }
     // 재시도가 남아있지 않으면 for 루프가 자연히 끝나고, 아래에서 대체 모델을 시도한다.
@@ -2661,6 +2663,7 @@ async function analyzeImageWithGemini(base64ImageDataUrl) {
     console.warn(
       `[Gemini] ${GEMINI_MODEL}에서 실패(${primaryStatus}) - 대체 모델(${GEMINI_FALLBACK_MODEL})로 마지막으로 시도합니다.`
     );
+    statusText.innerHTML = '<span class="spinner"></span>다른 방식으로 다시 시도하는 중입니다...';
     response = await callModel(GEMINI_FALLBACK_MODEL);
     if (!response.ok) {
       errText = await response.text();
