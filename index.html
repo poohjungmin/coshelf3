@@ -90,9 +90,7 @@
        버튼)는 원래 있던 위치 그대로 유지한다. */
     margin: 0 -20px;
     padding: 8px 20px;
-    background: rgba(255,255,255,0.92);
-    backdrop-filter: saturate(180%) blur(16px);
-    -webkit-backdrop-filter: saturate(180%) blur(16px);
+    background: var(--bg); /* 완전 불투명 - 뒤에 스크롤되는 콘텐츠가 비치지 않게 */
   }
 
   header.top h1 {
