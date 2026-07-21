@@ -18,6 +18,10 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
   throw new Error("FIREBASE_SERVICE_ACCOUNT 환경변수가 필요합니다.");
 }
 
+// iOS가 이미 앱 이름(Coshelf)을 알림 상단에 표시해주므로, 제목에 앱 이름을
+// 중복해서 넣지 않는다.
+const NOTIFICATION_TITLE = "소비기한 알림";
+
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -45,8 +49,12 @@ function computeDday(expiryStr, todayDateStr) {
   return Math.round((expiry.getTime() - today.getTime()) / 86400000);
 }
 
-function dDayLabel(day) {
-  return day === 0 ? "오늘 소비기한" : `소비기한 ${day}일 전`;
+// 남은 일수를 자연스러운 문장으로 표현한다("0일 남았습니다" 같은 어색한
+// 표현 대신 오늘/내일은 따로, 그 외에는 "N일 남았습니다").
+function ddayPhrase(day) {
+  if (day === 0) return "오늘까지입니다";
+  if (day === 1) return "내일까지입니다";
+  return `${day}일 남았습니다`;
 }
 
 async function sendPush(subscription, payload) {
@@ -58,18 +66,9 @@ async function sendPush(subscription, payload) {
   }
 }
 
-async function processDevice(docSnap) {
-  const device = docSnap.data();
-  const logPrefix = `[send-notifications] ${docSnap.id}:`;
-
-  if (!device.subscription) {
-    console.log(`${logPrefix} 구독 없음 - 건너뜀`);
-    return;
-  }
-
-  const { dateStr: todayStr, hhmm: nowHHMM } = kstNow();
-  // rules: [{ day: 0|1, time: "HH:MM" }] - 시점(하루 전/당일)과 시각이 묶인
-  // 규칙 단위. 예전의 days[]×times[] 교차 조합 방식을 대체한다.
+// 규칙 기반(소비기한 N일 전) 알림을 처리한다. 성공/실패에 따라 notifiedRules를
+// 갱신하고, 구독이 만료됐으면 true를 반환해 이후 처리를 건너뛰게 한다.
+async function processRules(docSnap, device, todayStr, nowHHMM, logPrefix) {
   const rules = Array.isArray(device.rules) ? device.rules : [];
   const products = Array.isArray(device.products) ? device.products : [];
   const notifiedRules = { ...(device.notifiedRules || {}) };
@@ -104,13 +103,14 @@ async function processDevice(docSnap) {
 
     if (matched.length > 0) {
       const firstLabel = [matched[0].brand, matched[0].product].filter(Boolean).join(" ") || "제품";
+      const phrase = ddayPhrase(rule.day);
       const body =
         matched.length === 1
-          ? `${firstLabel}의 ${dDayLabel(computeDday(matched[0].expiryDate, todayStr))}입니다.`
-          : `${firstLabel} 외 ${matched.length - 1}개 제품의 소비기한이 임박했습니다.`;
+          ? `${firstLabel}의 소비기한이 ${phrase}`
+          : `${firstLabel} 외 ${matched.length - 1}개 제품의 소비기한이 ${phrase}`;
 
       const result = await sendPush(device.subscription, {
-        title: "Coshelf 소비기한 알림",
+        title: NOTIFICATION_TITLE,
         body,
         url: "./",
       });
@@ -141,6 +141,73 @@ async function processDevice(docSnap) {
   if (changed) {
     await docSnap.ref.update({ notifiedRules });
   }
+  return { subscriptionExpired };
+}
+
+// 소비기한이 지난 제품 요약 알림을 처리한다. 제품별로 여러 건 보내지 않고
+// "N개 있습니다" 하나로 요약해서, 지정 시각이 지난 뒤 하루에 한 번만 보낸다.
+async function processExpiredSummary(docSnap, device, todayStr, nowHHMM, logPrefix) {
+  const es = device.expiredSummary;
+  if (!es || !es.enabled || typeof es.time !== "string") {
+    return;
+  }
+  if (device.notifiedExpiredDate === todayStr) {
+    console.log(`${logPrefix} 지난 제품 요약 - 오늘 이미 처리함`);
+    return;
+  }
+  if (nowHHMM < es.time) {
+    console.log(`${logPrefix} 지난 제품 요약 - 아직 안 지남 (현재 ${nowHHMM}, 설정 ${es.time})`);
+    return;
+  }
+
+  const products = Array.isArray(device.products) ? device.products : [];
+  const expiredCount = products.filter((p) => computeDday(p.expiryDate, todayStr) < 0).length;
+  console.log(`${logPrefix} 지난 제품 요약 - 지난 제품 ${expiredCount}개`);
+
+  if (expiredCount === 0) {
+    // 보낼 내용이 없으므로 오늘 처리 완료로만 표시하고 끝낸다.
+    await docSnap.ref.update({ notifiedExpiredDate: todayStr });
+    return;
+  }
+
+  const result = await sendPush(device.subscription, {
+    title: NOTIFICATION_TITLE,
+    body: `소비기한이 지난 제품이 ${expiredCount}개 있습니다.`,
+    url: "./",
+  });
+  console.log(`${logPrefix} 지난 제품 요약 push 발송 결과: ${JSON.stringify(result)}`);
+
+  if (result.ok) {
+    await docSnap.ref.update({ notifiedExpiredDate: todayStr });
+  } else if (result.statusCode === 404 || result.statusCode === 410) {
+    // 구독이 만료됨 - 정리하고, 오늘은 어차피 못 보내니 처리 완료로 표시한다.
+    await docSnap.ref.update({ subscription: null, notifiedExpiredDate: todayStr });
+    console.log(`${logPrefix} 지난 제품 요약 발송 중 만료된 구독 정리`);
+  } else {
+    // 네트워크 오류 등 일시적 실패로 추정 - 다음 실행에서 재시도할 수 있도록
+    // 오늘 처리 완료로 표시하지 않는다.
+    console.warn(`${logPrefix} 지난 제품 요약 발송 실패(일시적으로 추정) - 다음 실행에 재시도`);
+  }
+}
+
+async function processDevice(docSnap) {
+  const device = docSnap.data();
+  const logPrefix = `[send-notifications] ${docSnap.id}:`;
+
+  if (!device.subscription) {
+    console.log(`${logPrefix} 구독 없음 - 건너뜀`);
+    return;
+  }
+
+  const { dateStr: todayStr, hhmm: nowHHMM } = kstNow();
+
+  const { subscriptionExpired } = await processRules(docSnap, device, todayStr, nowHHMM, logPrefix);
+  if (subscriptionExpired) {
+    // 구독이 방금 만료 처리됐으면 이번 실행에서는 더 보낼 수 없으니 건너뛴다.
+    return;
+  }
+
+  await processExpiredSummary(docSnap, device, todayStr, nowHHMM, logPrefix);
 }
 
 async function main() {
