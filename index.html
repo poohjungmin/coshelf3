@@ -85,7 +85,11 @@
     top: 0;
     z-index: 40;
     text-align: center;
-    padding: 12px 0 30px;
+    /* .app의 좌우 패딩(20px)만큼 바깥으로 확장해서 배경이 화면 끝까지
+       닿게 하고, 같은 크기의 좌우 패딩을 다시 줘서 내부 콘텐츠(제목,
+       버튼)는 원래 있던 위치 그대로 유지한다. */
+    margin: 0 -20px;
+    padding: 8px 20px;
     background: rgba(255,255,255,0.92);
     backdrop-filter: saturate(180%) blur(16px);
     -webkit-backdrop-filter: saturate(180%) blur(16px);
@@ -94,7 +98,7 @@
   header.top h1 {
     font-size: 20px;
     font-weight: 600;
-    margin: 0 0 4px;
+    margin: 0;
     letter-spacing: -0.3px;
   }
 
@@ -106,8 +110,8 @@
 
   .settings-btn {
     position: absolute;
-    top: 2px;
-    right: 0;
+    top: -2px;
+    right: 20px;
     width: 44px;
     height: 44px;
     display: flex;
@@ -128,8 +132,8 @@
      (메인 화면의 ⚙️ 버튼과 동일한 위치 로직/터치 영역, 좌우만 대칭 반전) */
   .back-btn {
     position: absolute;
-    top: 5px;
-    left: 0;
+    top: -2px;
+    left: 20px;
     width: 44px;
     height: 44px;
     display: flex;
