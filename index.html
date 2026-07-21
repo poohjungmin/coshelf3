@@ -597,34 +597,36 @@
   }
 
   /* ============================================================
-     등록 화면 - 즐겨찾기 토글
+     등록/수정 화면 - 결과 카드 제목 줄의 즐겨찾기 별 버튼
      ============================================================ */
-  .favorite-toggle {
+  .result-card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: #ffffff;
+    margin: 0 0 14px;
   }
-
-  .favorite-toggle-label {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
+  #resultCardTitle {
+    /* 원래 .card h2의 margin-bottom을 .result-card-header가 대신 담당한다 */
+    margin: 0;
   }
 
   .favorite-star-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    /* 시각적으로는 제목 줄에 딱 붙되, 터치 영역(40px)은 그대로 넉넉하게 */
+    margin: -8px -10px -8px 0;
+    padding: 0;
     border: none;
     background: none;
-    font-size: 26px;
+    font-size: 22px;
     line-height: 1;
     cursor: pointer;
     color: #d1d1d6;
     -webkit-tap-highlight-color: transparent;
-    transition: transform 0.12s ease, color 0.15s ease;
+    transition: color 180ms ease, transform 180ms ease;
   }
   .favorite-star-btn.active { color: #ffcc00; }
   .favorite-star-btn:active { transform: scale(0.85); }
@@ -1308,7 +1310,10 @@
 
     <!-- 2-3. 결과 카드 (분석 후 / 직접입력 / 수정 시 노출) -->
     <section class="card" id="resultCard" style="display:none;">
-      <h2 id="resultCardTitle">제품 정보 (직접 수정 가능)</h2>
+      <div class="result-card-header">
+        <h2 id="resultCardTitle">제품 정보 (직접 수정 가능)</h2>
+        <button type="button" class="favorite-star-btn" id="favoriteToggleBtn" aria-pressed="false" aria-label="즐겨찾기">☆</button>
+      </div>
 
       <div class="result-field">
         <label for="brandInput">브랜드</label>
@@ -1336,13 +1341,6 @@
             maxlength="10"
             placeholder="숫자 8자리 입력 예: 20280115"
           />
-        </div>
-      </div>
-
-      <div class="result-field">
-        <div class="favorite-toggle">
-          <span class="favorite-toggle-label">⭐ 즐겨찾기</span>
-          <button type="button" class="favorite-star-btn" id="favoriteToggleBtn" aria-pressed="false">★</button>
         </div>
       </div>
 
@@ -2243,6 +2241,7 @@ previewBox.addEventListener("click", (e) => {
 function updateFavoriteToggleUI() {
   favoriteToggleBtn.classList.toggle("active", currentFavorite);
   favoriteToggleBtn.setAttribute("aria-pressed", String(currentFavorite));
+  favoriteToggleBtn.textContent = currentFavorite ? "★" : "☆";
 }
 
 favoriteToggleBtn.addEventListener("click", () => {
