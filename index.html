@@ -81,9 +81,14 @@
   }
 
   header.top {
-    position: relative;
+    position: sticky;
+    top: 0;
+    z-index: 40;
     text-align: center;
     padding: 12px 0 30px;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: saturate(180%) blur(16px);
+    -webkit-backdrop-filter: saturate(180%) blur(16px);
   }
 
   header.top h1 {
@@ -672,16 +677,13 @@
   }
 
   /* ============================================================
-     목록 화면 상단 검색창 - 카테고리 바로 위, 스크롤 시 상단에 고정(sticky)
+     목록 화면 상단 검색창 - 카테고리 바로 위, 일반 콘텐츠처럼 스크롤됨
+     (고정되는 건 검색창이 아니라 상단 header.top 쪽이다)
      ============================================================ */
   .list-search-bar {
-    position: sticky;
-    top: 0;
-    z-index: 30;
     display: flex;
     align-items: center;
     gap: 8px;
-    background: var(--bg);
     padding: 4px 0 12px;
   }
 
