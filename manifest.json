@@ -1,7 +1,7 @@
 {
   "name": "Coshelf",
   "short_name": "Coshelf",
-  "description": "AI 기반 화장품 소비기한 관리 앱",
+  "description": "사진 한 장으로 등록하고, 소비기한 걱정 없이 화장품을 끝까지 쓰세요.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
