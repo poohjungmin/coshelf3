@@ -101,13 +101,18 @@
 
   .settings-btn {
     position: absolute;
-    top: 8px;
+    top: 2px;
     right: 0;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
-    font-size: 20px;
+    font-size: 22px; /* 기존 20px 대비 약 10% 확대, 터치 영역은 flex+고정 크기로 44px 확보 */
     line-height: 1;
-    padding: 6px;
+    padding: 0;
     cursor: pointer;
     color: var(--text-secondary);
     -webkit-tap-highlight-color: transparent;
@@ -118,14 +123,19 @@
      (메인 화면의 ⚙️ 버튼과 동일한 위치 로직/터치 영역, 좌우만 대칭 반전) */
   .back-btn {
     position: absolute;
-    top: 8px;
+    top: 5px;
     left: 0;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
-    font-size: 26px;
+    font-size: 29px; /* 기존 26px 대비 약 12% 확대, 터치 영역은 flex+고정 크기로 44px 확보 */
     font-weight: 700;
     line-height: 1;
-    padding: 6px;
+    padding: 0;
     cursor: pointer;
     color: var(--text-secondary);
     -webkit-tap-highlight-color: transparent;
@@ -665,6 +675,11 @@
     right: 0;
     bottom: 0;
     z-index: 50;
+    /* 검색 중 키보드가 올라오면 JS가 이 값을 밀어 올려서(translateY)
+       독 전체(검색창+탭바)가 키보드 위로 자연스럽게 따라 올라가게 한다.
+       평소(포커스 아님)에는 항상 0이라 기존 레이아웃과 동일하다. */
+    transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
+    transition: transform 0.25s ease;
   }
 
   .list-search-bar {
@@ -681,12 +696,31 @@
   }
   .list-search-bar.visible { display: flex; }
 
-  .list-search-bar input[type="text"] {
+  .search-input-wrap {
+    position: relative;
     flex: 1;
     min-width: 0;
+    display: flex;
+    align-items: center;
+  }
+  .search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
     font-size: 15px;
-    padding: 10px 14px;
-    border-radius: var(--radius-sm);
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .list-search-bar input[type="text"] {
+    width: 100%;
+    height: 46px;
+    /* iOS는 입력창 font-size가 16px 미만이면 포커스 시 화면을 자동으로
+       확대해버린다 - 16px로 맞춰서 그 부작용도 함께 막는다. */
+    font-size: 16px;
+    padding: 0 14px 0 38px; /* 왼쪽은 돋보기 아이콘 자리만큼, 오른쪽은 여유 있게 */
+    border-radius: 12px; /* iOS 기본 검색창에 가까운 둥근 정도 */
     border: 1px solid var(--border);
     background: var(--surface);
     font-family: inherit;
@@ -1567,7 +1601,10 @@
      ============================================================ -->
 <div class="bottom-dock" id="bottomDock">
   <div class="list-search-bar" id="listSearchBar">
-    <input type="text" id="searchInput" placeholder="브랜드 또는 제품명 검색" autocomplete="off" />
+    <div class="search-input-wrap">
+      <span class="search-icon" aria-hidden="true">🔍</span>
+      <input type="text" id="searchInput" placeholder="브랜드 또는 제품명 검색" autocomplete="off" />
+    </div>
     <button type="button" class="search-clear-btn" id="searchClearBtn" aria-label="검색어 지우기" style="display:none;">✕</button>
   </div>
 
@@ -1806,6 +1843,7 @@ const favoriteToggleBtn = document.getElementById("favoriteToggleBtn");
 const listSearchBar = document.getElementById("listSearchBar");
 const searchInput = document.getElementById("searchInput");
 const searchClearBtn = document.getElementById("searchClearBtn");
+const bottomDock = document.getElementById("bottomDock");
 
 
 const deleteConfirmBackdrop = document.getElementById("deleteConfirmBackdrop");
@@ -3948,6 +3986,38 @@ searchClearBtn.addEventListener("click", () => {
   searchClearBtn.style.display = "none";
   renderList();
   searchInput.focus();
+});
+
+// ---------------------------------------------------------------
+// 검색창이 iOS 키보드에 가려지지 않도록 처리
+// ------------------------------------------------------------------------
+// 검색창은 하단 고정 독(.bottom-dock) 안에 있는데, iOS Safari/PWA는
+// 키보드가 올라와도 position:fixed 요소를 레이아웃 뷰포트 기준 그대로
+// 두는 경우가 있어(실제 보이는 영역은 줄어드는데 고정 요소는 안 움직임)
+// 검색창이 키보드 뒤로 가려질 수 있다. VisualViewport API로 키보드가
+// 실제로 가린 높이를 계산해서, 검색창에 포커스가 있는 동안만 독 전체를
+// 그만큼 위로 밀어 올린다(--keyboard-offset 커스텀 프로퍼티 + CSS
+// transition으로 부드럽게). 포커스를 벗어나거나 키보드가 내려가면
+// 자동으로 0으로 돌아가 기존 레이아웃으로 복귀한다.
+// ---------------------------------------------------------------
+function updateKeyboardOffset() {
+  if (!window.visualViewport) return;
+  if (document.activeElement !== searchInput) {
+    bottomDock.style.setProperty("--keyboard-offset", "0px");
+    return;
+  }
+  const vv = window.visualViewport;
+  const overlap = window.innerHeight - vv.height - vv.offsetTop;
+  bottomDock.style.setProperty("--keyboard-offset", `${Math.max(0, overlap)}px`);
+}
+
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", updateKeyboardOffset);
+  window.visualViewport.addEventListener("scroll", updateKeyboardOffset);
+}
+searchInput.addEventListener("focus", updateKeyboardOffset);
+searchInput.addEventListener("blur", () => {
+  bottomDock.style.setProperty("--keyboard-offset", "0px");
 });
 
 // 목록의 수정/삭제 버튼 또는 행 자체 클릭을 이벤트 위임으로 처리
