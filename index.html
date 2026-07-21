@@ -78,6 +78,12 @@
     margin: 0 auto;
     padding: 28px 20px 140px; /* 하단 탭바(높이 확대)만큼 여백 확보 */
     min-height: 100vh;
+    transition: padding-bottom 0.22s ease;
+  }
+  /* 검색창에 포커스가 있는 동안: 탭바가 숨으므로 그만큼 하단 여백을
+     줄여서 검색 결과가 화면을 더 넓게 쓸 수 있게 한다. */
+  .app.search-focused {
+    padding-bottom: 76px;
   }
 
   header.top {
@@ -339,6 +345,11 @@
   }
   .status.error { color: var(--danger); }
   .status.success { color: var(--success); }
+  /* 평소(메시지 없을 때) 카드 하단에 남는 여백이 커 보이지 않도록 줄인다 */
+  #notifyStatus {
+    margin-top: 8px;
+    min-height: 0;
+  }
 
   .spinner {
     display: inline-block;
@@ -675,11 +686,6 @@
     right: 0;
     bottom: 0;
     z-index: 50;
-    /* 검색 중 키보드가 올라오면 JS가 이 값을 밀어 올려서(translateY)
-       독 전체(검색창+탭바)가 키보드 위로 자연스럽게 따라 올라가게 한다.
-       평소(포커스 아님)에는 항상 0이라 기존 레이아웃과 동일하다. */
-    transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
-    transition: transform 0.25s ease;
   }
 
   .list-search-bar {
@@ -693,6 +699,12 @@
     backdrop-filter: saturate(180%) blur(16px);
     -webkit-backdrop-filter: saturate(180%) blur(16px);
     border-top: 1px solid var(--border);
+    /* 검색 중 키보드가 올라오면 JS가 이 값을 밀어 올려서(translateY)
+       검색창이 키보드 위로 자연스럽게 따라 올라가게 한다. 평소(포커스
+       아님)에는 항상 0이라 기존 레이아웃과 동일하다. 탭바는 이제 이
+       변수와 무관하게 완전히 숨겨지므로 여기서만 적용한다. */
+    transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
+    transition: transform 0.25s ease;
   }
   .list-search-bar.visible { display: flex; }
 
@@ -764,6 +776,21 @@
     -webkit-backdrop-filter: saturate(180%) blur(16px);
     border-top: 1px solid var(--border);
     padding: 10px 0 max(13px, env(safe-area-inset-bottom));
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.22s ease, transform 0.22s ease, max-height 0.22s ease, padding 0.22s ease;
+    max-height: 100px;
+    overflow: hidden;
+  }
+  /* 검색창에 포커스가 있는 동안 탭바를 완전히 숨긴다 - 키보드를 따라
+     올라오는 대신, 자연스럽게 사라졌다가 검색을 마치면 다시 나타난다. */
+  .tabbar.tabbar-hidden {
+    opacity: 0;
+    transform: translateY(16px);
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    pointer-events: none;
   }
 
   .tabbar-inner {
@@ -1294,7 +1321,7 @@
 </style>
 </head>
 <body>
-<div class="app">
+<div class="app" id="appRoot">
 
   <header class="top">
     <button type="button" class="back-btn" id="registerBackBtn" aria-label="뒤로가기" style="display:none;">‹</button>
@@ -1432,7 +1459,7 @@
         </span>
       </button>
       <button type="button" class="settings-menu-row" data-target="screen-settings-dateinput">
-        <span class="settings-menu-label">입력 방식</span>
+        <span class="settings-menu-label">소비기한 등록 방법</span>
         <span class="settings-menu-right">
           <span class="settings-menu-preview" id="menuPreviewDateInput"></span>
           <span class="settings-menu-chevron">›</span>
@@ -1504,9 +1531,6 @@
           <button type="button" class="btn btn-secondary" id="notifyAddRuleBtn" style="margin-top: 10px;">
             + 알림 추가
           </button>
-          <p class="list-sort-note" style="margin: 8px 4px 0; text-align: left;">
-            알림은 15분 단위로 확인되어 설정한 시간에 맞춰 전송됩니다.
-          </p>
         </div>
 
         <div class="notify-subrow">
@@ -1520,39 +1544,41 @@
             <select id="notifyExpiredMinuteSelect" class="notify-time-select" aria-label="확인 분"></select>
           </div>
           <p class="list-sort-note" style="margin: 8px 4px 0; text-align: left;">
-            지정한 시간에 하루 한 번, 소비기한이 지난 제품 개수를 요약해서 알려드립니다.
+            지정한 시간에 하루 한 번, 소비기한이 지난 제품 개수를 알려드립니다.
           </p>
         </div>
 
-        <button type="button" class="btn btn-primary" id="notifyTestBtn" style="margin-top: 18px;">
-          테스트 알림 보내기
-        </button>
+        <div class="notify-subrow">
+          <button type="button" class="btn btn-primary" id="notifyTestBtn">
+            테스트 알림 보내기
+          </button>
+        </div>
       </div>
 
       <p class="status" id="notifyStatus"></p>
     </section>
     <p class="list-sort-note">
       알림을 받으려면 기기 알림 권한을 허용해야 합니다. iOS는 홈 화면에 앱을 추가한 상태에서만
-      알림 수신이 가능합니다. 설정한 시점/시각을 기준으로 매일 자동 확인 후 발송됩니다.
+      알림 수신이 가능합니다.
     </p>
   </section>
 
   <!-- ---- 설정 > 백업 ---- -->
-  <!-- ---- 설정 > 입력 방식 ---- -->
-  <section class="screen" id="screen-settings-dateinput" data-settings-title="입력 방식">
-    <h2 class="settings-section-title">유효기한 입력 방식</h2>
+  <!-- ---- 설정 > 소비기한 등록 방법 ---- -->
+  <section class="screen" id="screen-settings-dateinput" data-settings-title="소비기한 등록 방법">
+    <h2 class="settings-section-title">소비기한 등록 방법</h2>
     <section class="card" style="padding: 4px 16px;">
       <button type="button" class="settings-radio-row" id="dateInputModeKeyboardBtn" data-mode="keyboard">
         <span>
-          <span class="settings-radio-title">숫자 직접 입력</span>
-          <span class="settings-radio-desc">숫자 키패드로 YYYY.MM.DD 입력 (기본값)</span>
+          <span class="settings-radio-title">직접 입력</span>
+          <span class="settings-radio-desc">숫자로 입력합니다 (기본값)</span>
         </span>
         <span class="settings-radio-check">✓</span>
       </button>
       <button type="button" class="settings-radio-row" id="dateInputModeCalendarBtn" data-mode="calendar">
         <span>
-          <span class="settings-radio-title">달력으로 선택</span>
-          <span class="settings-radio-desc">날짜를 터치해서 선택</span>
+          <span class="settings-radio-title">달력에서 선택</span>
+          <span class="settings-radio-desc">달력에서 날짜를 고릅니다</span>
         </span>
         <span class="settings-radio-check">✓</span>
       </button>
@@ -1609,7 +1635,7 @@
     <button type="button" class="search-clear-btn" id="searchClearBtn" aria-label="검색어 지우기" style="display:none;">✕</button>
   </div>
 
-  <nav class="tabbar">
+  <nav class="tabbar" id="tabbar">
     <div class="tabbar-inner">
       <button type="button" class="tab-btn active" id="tabHomeBtn" data-screen="screen-home">
         <span class="tab-icon">🏠</span>홈
@@ -1846,6 +1872,8 @@ const listSearchBar = document.getElementById("listSearchBar");
 const searchInput = document.getElementById("searchInput");
 const searchClearBtn = document.getElementById("searchClearBtn");
 const bottomDock = document.getElementById("bottomDock");
+const tabbarEl = document.getElementById("tabbar");
+const appRoot = document.getElementById("appRoot");
 
 
 const deleteConfirmBackdrop = document.getElementById("deleteConfirmBackdrop");
@@ -2172,7 +2200,7 @@ function renderSettingsMenu() {
     ? `켜짐 (${notifySettings.rules.length}개)`
     : "꺼짐";
 
-  menuPreviewDateInput.textContent = appSettings.dateInputMode === "calendar" ? "달력" : "숫자 입력";
+  menuPreviewDateInput.textContent = appSettings.dateInputMode === "calendar" ? "달력에서 선택" : "직접 입력";
 
   const user = window.coshelfFirebase && window.coshelfFirebase.auth.currentUser;
   menuPreviewBackup.textContent = user && !user.isAnonymous ? user.email : "로그인 안 함";
@@ -3372,10 +3400,10 @@ populateDaySelect(addRuleDaySelect);
 
 loadNotifySettingsFromStorage();
 
-// "0일 전"이 아니라 "당일"/"하루 전"처럼 자연스럽게 표현한다.
+// "0일 전"이 아니라 "당일"로 표현하고, 나머지는 "N일 전"으로 통일한다
+// (1일 전도 "하루 전"이 아니라 "1일 전"으로 표기해 다른 옵션과 일관되게).
 function notifyDayPhrase(day) {
   if (day === 0) return "소비기한 당일";
-  if (day === 1) return "소비기한 하루 전";
   return `소비기한 ${day}일 전`;
 }
 
@@ -4050,35 +4078,44 @@ searchClearBtn.addEventListener("click", () => {
 });
 
 // ---------------------------------------------------------------
-// 검색창이 iOS 키보드에 가려지지 않도록 처리
+// 검색 중 UI 처리: 검색창이 iOS 키보드에 가려지지 않게 하고, 탭바는
+// 검색 중엔 아예 숨긴다
 // ------------------------------------------------------------------------
 // 검색창은 하단 고정 독(.bottom-dock) 안에 있는데, iOS Safari/PWA는
 // 키보드가 올라와도 position:fixed 요소를 레이아웃 뷰포트 기준 그대로
 // 두는 경우가 있어(실제 보이는 영역은 줄어드는데 고정 요소는 안 움직임)
 // 검색창이 키보드 뒤로 가려질 수 있다. VisualViewport API로 키보드가
-// 실제로 가린 높이를 계산해서, 검색창에 포커스가 있는 동안만 독 전체를
+// 실제로 가린 높이를 계산해서, 검색창에 포커스가 있는 동안만 검색창 자체를
 // 그만큼 위로 밀어 올린다(--keyboard-offset 커스텀 프로퍼티 + CSS
-// transition으로 부드럽게). 포커스를 벗어나거나 키보드가 내려가면
-// 자동으로 0으로 돌아가 기존 레이아웃으로 복귀한다.
+// transition으로 부드럽게). 탭바는 검색 중 쓸 일이 거의 없고 화면만
+// 좁히므로, 키보드를 따라 올라오게 하는 대신 opacity+translateY로 아예
+// 숨겨서 검색 결과가 화면을 더 넓게 쓸 수 있게 한다. 포커스를 벗어나면
+// 전부 자동으로 원래 상태로 되돌아온다.
 // ---------------------------------------------------------------
 function updateKeyboardOffset() {
   if (!window.visualViewport) return;
   if (document.activeElement !== searchInput) {
-    bottomDock.style.setProperty("--keyboard-offset", "0px");
+    listSearchBar.style.setProperty("--keyboard-offset", "0px");
     return;
   }
   const vv = window.visualViewport;
   const overlap = window.innerHeight - vv.height - vv.offsetTop;
-  bottomDock.style.setProperty("--keyboard-offset", `${Math.max(0, overlap)}px`);
+  listSearchBar.style.setProperty("--keyboard-offset", `${Math.max(0, overlap)}px`);
 }
 
 if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", updateKeyboardOffset);
   window.visualViewport.addEventListener("scroll", updateKeyboardOffset);
 }
-searchInput.addEventListener("focus", updateKeyboardOffset);
+searchInput.addEventListener("focus", () => {
+  tabbarEl.classList.add("tabbar-hidden");
+  appRoot.classList.add("search-focused");
+  updateKeyboardOffset();
+});
 searchInput.addEventListener("blur", () => {
-  bottomDock.style.setProperty("--keyboard-offset", "0px");
+  tabbarEl.classList.remove("tabbar-hidden");
+  appRoot.classList.remove("search-focused");
+  listSearchBar.style.setProperty("--keyboard-offset", "0px");
 });
 
 // 목록의 수정/삭제 버튼 또는 행 자체 클릭을 이벤트 위임으로 처리
